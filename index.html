@@ -436,7 +436,7 @@ const MISSIONS = [
 /* 목표 상향(×1.5) · 높은 단계 돌발 상황 */
 MISSIONS.forEach(m => ['land','dep','park'].forEach(k => { if (m.goals[k]) m.goals[k] = Math.ceil(m.goals[k] * 1.5); }));
 /* 높은 단계 교통량 · 시간 보정 */
-[[11,{ min:4, spawn:{ every:12, max:4, bat:[52,74] } }],[13,{ min:4.5, spawn:{ every:12, max:4, bat:[52,74] } }],[14,{ min:5, spawn:{ every:12, max:4, bat:[55,78] } }],[15,{ min:5, spawn:{ every:10, max:4, bat:[55,78] }, goals:{ land:9, dep:8, ev:5 } }]]
+[[11,{ min:4.5, spawn:{ every:12, max:4, bat:[52,74] } }],[12,{ min:5 }],[13,{ min:5.5, spawn:{ every:12, max:4, bat:[52,74] } }],[14,{ min:6, spawn:{ every:12, max:4, bat:[55,78] } }],[15,{ min:7, spawn:{ every:10, max:4, bat:[55,78] }, goals:{ land:13, dep:9, ev:5 } }]]
   .forEach(([id, o]) => Object.assign(MISSIONS.find(m => m.id===id), o));
 const SURPRISE = { 9:{ n:1, p:0.6 }, 10:{ n:1, p:0.6 }, 11:{ n:1, p:1 }, 12:{ n:1, p:1 }, 13:{ n:2, p:0.8 }, 14:{ n:1, p:1 } };
 MISSIONS.forEach(m => { if (SURPRISE[m.id] || m.events === 'random') m.surprise = true; });
@@ -974,7 +974,7 @@ function newState(m){
     card:null, logs:[], sel:null, used:new Set(), stats:{ land:0, dep:0, park:0, viol:0, forced:0, emg:0, evOk:0, evTot:0, div:0 },
     incidents:[], schedule:[], nextSpawn: m.spawn ? 12 : 1e9, nextTransit: 8, nextVisual: 4, ended:false, assist:m.assist, goalsMetAt:null,
     sectorBusy:false, sectorWarn:false };
-  const evs = m.events==='random' ? ['gust','fod','mayday','drone','nordo','fire','sys'].sort(() => Math.random()-.5).slice(0,6).map((k,i) => ({ k, t:[30,72,112,155,200,245][i] + rnd(-3,3) })) : m.events.map(e => ({ k:e.k, t:e.t }));
+  const evs = m.events==='random' ? ['gust','fod','mayday','drone','nordo','fire','sys'].sort(() => Math.random()-.5).slice(0,6).map((k,i) => ({ k, t:(m.min >= 7 ? [35,95,155,215,275,335] : [30,72,112,155,200,245])[i] + rnd(-3,3) })) : m.events.map(e => ({ k:e.k, t:e.t }));
   G.schedule = evs.map(e => ({ ...e, done:false }));
   const sp = SURPRISE[m.id];
   if (sp && m.events !== 'random'){
