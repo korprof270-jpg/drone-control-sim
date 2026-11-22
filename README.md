@@ -14,6 +14,8 @@
 
 ### 모든 사용자 기록을 한곳에 모으기 (Google 스프레드시트)
 
+설정 안내 페이지: https://korprof270-jpg.github.io/drone-control-sim/setup.html (Apps Script 열기 · 코드 복사 버튼 포함)
+
 1. Google 스프레드시트를 새로 만들고 **확장 프로그램 → Apps Script**를 엽니다.
 2. `apps-script/Code.gs` 내용을 붙여 넣고 저장합니다.
 3. **배포 → 새 배포 → 유형: 웹 앱**, 실행 사용자: **나**, 액세스 권한: **모든 사용자** → 배포 → 권한 승인.

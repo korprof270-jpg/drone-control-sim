@@ -1,20 +1,16 @@
 /**
- * 드론 관제 미션 · 전체 기록 서버 (Google Apps Script)
- * 1) Google 스프레드시트를 새로 만들고 [확장 프로그램 → Apps Script]를 엽니다.
- * 2) 이 파일 내용을 그대로 붙여 넣고 저장합니다.
- * 3) [배포 → 새 배포 → 유형: 웹 앱] / 실행 사용자: 나 / 액세스 권한: 모든 사용자 → 배포
- * 4) 나온 웹 앱 URL(https://script.google.com/macros/s/.../exec)을 index.html 의 RECORD_URL 에 넣습니다.
+ * 드론 관제 미션 · 전체 기록 서버
+ * 연결된 스프레드시트: "드론 관제 미션 기록"
+ * 사용법: 오른쪽 위 [배포 → 새 배포 → 유형: 웹 앱] / 실행 사용자: 나 / 액세스 권한: 모든 사용자 → 배포
  */
-const SHEET_NAME = '기록';
+const SHEET_ID = '1llZEshS-5It_nGeqAid8HtIgwCksoG2VOfLDZRVat0w';
 const HEADER = ['시각', '이름', '미션', '미션 이름', '결과', '별', '점수', '위반', '소요(초)', '착륙', '출발', '상황 조치', '실패 사유'];
 
 function sheet_() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sh = ss.getSheetByName(SHEET_NAME);
-  if (!sh) { sh = ss.insertSheet(SHEET_NAME); sh.appendRow(HEADER); sh.setFrozenRows(1); }
+  const sh = SpreadsheetApp.openById(SHEET_ID).getSheets()[0];
+  if (sh.getLastRow() === 0) { sh.appendRow(HEADER); }
   return sh;
 }
-// 수식 주입 방지 + 길이 제한
 function safe_(v, n) {
   let s = String(v == null ? '' : v).replace(/[\u0000-\u001f]/g, '').slice(0, n || 40);
   if (/^[=+\-@]/.test(s)) s = "'" + s;
@@ -26,7 +22,7 @@ function doPost(e) {
   const lock = LockService.getScriptLock();
   lock.waitLock(10000);
   try {
-    const d = JSON.parse(e.postData.contents || '{}');
+    const d = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     const name = safe_(d.name, 20);
     if (!name) return json_({ ok: false });
     sheet_().appendRow([
@@ -48,3 +44,6 @@ function doGet() {
   return json_({ rows });
 }
 function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
+
+/** 배포 전에 한 번 실행해 권한을 승인하고 연결을 확인하는 함수 */
+function testConnection() { Logger.log('연결된 시트: ' + SpreadsheetApp.openById(SHEET_ID).getName() + ' / 행 수: ' + sheet_().getLastRow()); }
