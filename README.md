@@ -1,2 +1,7 @@
-# https-github.com-korprof270-jpg-drone-control-sim
-드론관제시뮬레이터
+# 드론 관제 미션
+
+도심 드론 버티포트 관제를 3D로 단계별(미션 1~15) 훈련하는 웹 시뮬레이션입니다.
+
+- 실행: `index.html`을 GitHub Pages 등 정적 호스팅에 올리면 됩니다. 빌드 과정은 없습니다.
+- 3D 라이브러리: three.js r128 (MIT License), `lib/` 폴더에 포함.
+- 교육용 예시이며 지명 · 호출부호 · 수치 기준은 가정입니다.

@@ -1,0 +1,1404 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="도심 드론 버티포트 관제를 3D로 단계별 훈련하는 웹 시뮬레이션">
+<title>드론 관제 미션</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@500;700&family=Noto+Sans+KR:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: control room — the 3D field view fills the left, the status board / request queue sits on the right. Single dark look by choice. */
+:root {
+  color-scheme: dark;
+  --bg: #08131F; --panel: #0E1D2E; --panel2: #14273C; --line: #26405E;
+  --fg: #E9EEF3; --muted: #9DB0C3; --amber: #F2A93B; --amber-ink: #1A1206;
+  --blue: #5AA6EE; --red: #EF6A55; --red-bg: #3A1C1C; --green: #4CC38A; --green-bg: #12322A; --amber-bg: #3A2C12;
+  --display: 'IBM Plex Sans KR', 'Noto Sans KR', system-ui, sans-serif;
+  --body: 'Noto Sans KR', system-ui, -apple-system, 'Apple SD Gothic Neo', sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { background: var(--bg); color: var(--fg); }
+body { font-family: var(--body); font-size: 14px; line-height: 1.5; padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); padding-block: 12px 24px; }
+@media (min-width: 600px) { body { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); } }
+h1, h2, h3 { font-family: var(--display); margin: 0; line-height: 1.3; text-wrap: balance; }
+p { margin: 0; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.label { font-size: 11px; letter-spacing: .08em; color: var(--muted); font-weight: 700; }
+.wrap { max-width: 1440px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+.btn { border: 1px solid var(--line); background: var(--panel2); padding: 8px 14px; border-radius: 9px; font-weight: 700; }
+.btn:hover:not([disabled]) { border-color: var(--muted); }
+.btn.primary { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); }
+.btn[disabled] { opacity: .4; cursor: not-allowed; }
+
+/* ===== menu ===== */
+.menu-head { display: flex; flex-wrap: wrap; gap: 16px; justify-content: space-between; align-items: end; border-bottom: 1px solid var(--line); padding-bottom: 16px; }
+.menu-head h1 { font-size: clamp(26px, 4vw, 38px); }
+.menu-head .sub { color: var(--muted); max-width: 64ch; margin-top: 6px; }
+.prog { font-family: var(--mono); color: var(--amber); font-weight: 700; }
+.tier h2 { font-size: 16px; margin: 6px 0 10px; display: flex; gap: 10px; align-items: baseline; }
+.tier h2 span { font-family: var(--body); font-weight: 400; color: var(--muted); font-size: 13px; }
+.mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.mcard { text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 6px; transition: border-color .15s, transform .15s; min-height: 150px; }
+.mcard:hover:not([disabled]) { border-color: var(--amber); transform: translateY(-2px); }
+.mcard[disabled] { opacity: .45; cursor: not-allowed; }
+.mcard .no { font-family: var(--mono); font-weight: 700; color: var(--amber); font-size: 13px; }
+.mcard h3 { font-size: 16px; }
+.mcard .d { color: var(--muted); font-size: 13px; }
+.mcard .meta { margin-top: auto; display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--muted); padding-top: 6px; border-top: 1px dashed var(--line); }
+.stars { color: var(--amber); letter-spacing: 2px; font-size: 14px; }
+.stars .off { color: #34506E; }
+.skill { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; background: #142C48; color: var(--blue); align-self: flex-start; }
+
+/* ===== briefing ===== */
+.brief { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.brief .panel { padding: 20px; }
+.brief h2 { font-size: 26px; }
+.brief .story { color: #D5DEE7; margin-top: 8px; font-size: 15px; }
+.guide { counter-reset: g; list-style: none; padding: 0; margin: 10px 0 0; display: flex; flex-direction: column; gap: 8px; }
+.guide li { counter-increment: g; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; background: var(--panel2); border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+.guide li::before { content: counter(g); width: 26px; height: 26px; border-radius: 50%; background: var(--amber); color: var(--amber-ink); font-weight: 700; display: grid; place-items: center; font-family: var(--mono); font-size: 13px; }
+.goals { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.goal { display: flex; justify-content: space-between; gap: 10px; background: var(--panel2); border-radius: 8px; padding: 8px 12px; font-size: 14px; }
+.goal b { font-family: var(--mono); color: var(--amber); }
+.warnbox { margin-top: 10px; font-size: 13px; color: #FFD9D2; background: var(--red-bg); border: 1px solid var(--red); border-radius: 8px; padding: 8px 12px; }
+.tipbox { margin-top: 10px; font-size: 13px; background: #13304A; border: 1px solid #24507A; border-radius: 8px; padding: 8px 12px; }
+
+/* ===== game ===== */
+.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 14px; }
+.top .l { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.top h1 { font-size: 16px; }
+.top .r { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+.kv { display: flex; flex-direction: column; line-height: 1.1; }
+.kv .v { font-family: var(--mono); font-weight: 700; font-size: 18px; font-variant-numeric: tabular-nums; }
+.kv .v.big { font-size: 24px; color: var(--amber); }
+.kv .v.low { color: var(--red); }
+.game { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 12px; align-items: start; }
+.col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; min-width: 0; }
+.view { position: relative; height: min(74vh, 760px); min-height: 420px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: #0B1828; }
+.view canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+#labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.lb { position: absolute; left: 0; top: 0; pointer-events: auto; transform: translate(-50%, -100%); display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; will-change: transform; }
+.lb .chip { display: flex; gap: 6px; align-items: center; background: rgba(8,19,31,.88); border: 1px solid #3A5878; border-radius: 7px; padding: 2px 7px; white-space: nowrap; font-size: 12px; }
+.lb .chip b { font-family: var(--mono); font-size: 12px; }
+.lb .rq { font-size: 11px; font-weight: 700; color: var(--amber); }
+.lb.emg .chip { border-color: var(--red); background: rgba(58,28,28,.92); }
+.lb.emg .rq { color: #FFB4A6; }
+.lb.req .chip { border-color: var(--amber); }
+.lb.sel .chip { border-color: var(--fg); box-shadow: 0 0 0 2px rgba(233,238,243,.35); }
+.lb.transit { pointer-events: none; opacity: .75; }
+.lb.transit .chip { border-color: #4A5C70; color: #B7C1CC; }
+.lb .bb { width: 46px; height: 4px; background: #08131F; border-radius: 2px; overflow: hidden; }
+.lb .bb i { display: block; height: 100%; background: var(--green); }
+.lb .acts { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; max-width: 280px; }
+.lb .acts .ab { font-size: 12px; padding: 5px 9px; border-radius: 7px; }
+.ab { border: 1px solid var(--line); background: var(--panel2); font-weight: 700; padding: 6px 10px; border-radius: 8px; }
+.ab.go { background: #17543F; border-color: var(--green); color: #E6FFF3; }
+.ab.stop { background: #5A3E12; border-color: var(--amber); color: #FFF0D6; }
+.ab.away { background: #1E2840; border-color: #5A6E96; }
+.ab.warn { background: #3A2620; border-color: #B8653F; color: #FFD9C8; }
+.ab small { display: block; font-size: 10px; font-weight: 500; opacity: .85; }
+.vtools { position: absolute; right: 10px; top: 10px; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.vtools .btn { padding: 5px 10px; font-size: 12px; background: rgba(14,29,46,.9); }
+.vtools .btn[aria-pressed="true"] { border-color: var(--amber); color: var(--amber); }
+.hint { position: absolute; left: 10px; top: 10px; max-width: min(520px, calc(100% - 20px)); background: rgba(19,48,74,.94); border: 1px solid #2F6698; border-radius: 10px; padding: 8px 12px; font-size: 13px; pointer-events: none; }
+.hint.warn { background: rgba(58,44,18,.95); border-color: var(--amber); }
+.hint.bad { background: rgba(58,28,28,.95); border-color: var(--red); }
+.hint b { color: var(--amber); }
+.flags { position: absolute; left: 10px; bottom: 10px; display: flex; gap: 6px; flex-wrap: wrap; pointer-events: none; max-width: calc(100% - 20px); }
+.flag { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--red-bg); color: #FFD9D2; border: 1px solid var(--red); }
+.flag.warn { background: var(--amber-bg); color: #FFE4B8; border-color: var(--amber); }
+.legend { position: absolute; right: 10px; bottom: 10px; font-size: 11px; color: var(--muted); background: rgba(8,19,31,.8); border-radius: 8px; padding: 4px 8px; pointer-events: none; }
+.legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin: 0 3px 0 8px; }
+.toast { position: absolute; left: 50%; top: 40%; transform: translate(-50%, -50%); background: rgba(14,29,46,.96); border: 1px solid var(--amber); border-radius: 14px; padding: 16px 24px; text-align: center; pointer-events: none; }
+.toast h2 { font-size: 22px; color: var(--amber); }
+
+.board .row { display: flex; justify-content: space-between; gap: 8px; align-items: center; font-size: 13px; padding: 3px 0; }
+.board .row .k { color: var(--muted); }
+.board .row .v { font-weight: 700; }
+.v.ok { color: var(--green); } .v.warn { color: var(--amber); } .v.bad { color: var(--red); }
+.gl { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.gl .g { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; font-size: 13px; }
+.gl .g .bar { grid-column: 1 / -1; height: 5px; background: var(--panel2); border-radius: 3px; overflow: hidden; }
+.gl .g .bar i { display: block; height: 100%; background: var(--amber); }
+.gl .g.done .bar i { background: var(--green); }
+.gl .g.done span:first-child::after { content: " ✓"; color: var(--green); }
+.stands { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 6px; }
+.stand { background: var(--panel2); border-radius: 8px; padding: 6px 8px; font-size: 12px; border-left: 3px solid var(--green); }
+.stand.busy { border-left-color: var(--blue); } .stand.off { border-left-color: #56687E; opacity: .7; } .stand.fire { border-left-color: var(--red); background: #2A1A22; }
+.stand b { display: block; font-family: var(--mono); }
+.queue { display: flex; flex-direction: column; gap: 6px; max-height: 340px; overflow-y: auto; }
+.q { background: var(--panel2); border-radius: 9px; padding: 8px 10px; border-left: 4px solid #3A5070; display: flex; flex-direction: column; gap: 6px; cursor: pointer; }
+.q.req { border-left-color: var(--amber); } .q.emg { border-left-color: var(--red); background: #24171C; } .q.sel { outline: 1px solid var(--fg); }
+.q .h { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.q .h b { font-family: var(--mono); }
+.q .h .s { font-size: 12px; color: var(--muted); }
+.q .h .w { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.q .acts { display: flex; gap: 6px; flex-wrap: wrap; }
+.tag { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 999px; }
+.tag.arr { background: var(--amber-bg); color: var(--amber); } .tag.dep { background: #142C48; color: var(--blue); } .tag.emg { background: var(--red-bg); color: var(--red); } .tag.nordo { background: #2A2F38; color: #C9D2DC; }
+.noone { color: var(--muted); font-size: 13px; }
+.card { border-radius: 12px; padding: 12px; border: 1px solid var(--red); background: #1E1520; display: flex; flex-direction: column; gap: 8px; animation: pop .3s ease-out; }
+.card.warn { border-color: var(--amber); background: #1F1A12; }
+.card .t { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.card h2 { font-size: 16px; }
+.card .d { font-size: 13px; color: #D5DEE7; }
+.card .opt { text-align: left; padding: 9px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel2); font-size: 13px; }
+.card .opt:hover:not([disabled]) { border-color: var(--amber); }
+.card .opt.ok { border-color: var(--green); background: var(--green-bg); } .card .opt.ng { border-color: var(--red); background: var(--red-bg); }
+.card .why { font-size: 13px; padding: 8px 10px; border-radius: 8px; background: var(--panel2); }
+.cbar { height: 5px; background: var(--panel2); border-radius: 3px; overflow: hidden; } .cbar i { display: block; height: 100%; background: var(--amber); }
+details.mg summary { cursor: pointer; font-weight: 700; font-size: 13px; }
+details.mg ol { margin: 8px 0 0; padding-left: 20px; font-size: 13px; display: flex; flex-direction: column; gap: 4px; color: #D5DEE7; }
+.log { display: flex; flex-direction: column; gap: 3px; max-height: 150px; overflow-y: auto; font-size: 12px; }
+.log .m { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 6px; padding: 3px 7px; border-radius: 5px; background: var(--panel2); }
+.log .m .tt { color: var(--muted); font-family: var(--mono); }
+.log .m.bad { background: var(--red-bg); } .log .m.good { background: var(--green-bg); } .log .m.sys { background: var(--amber-bg); }
+.switch { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); cursor: pointer; }
+
+/* result */
+.overlay { position: fixed; inset: 0; background: rgba(4, 9, 16, .84); display: grid; place-items: center; z-index: 50; padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); overflow-y: auto; }
+.dialog { width: min(760px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 22px; display: flex; flex-direction: column; gap: 14px; max-height: 100%; overflow-y: auto; }
+.dialog h2 { font-size: 26px; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.stat { background: var(--panel2); border-radius: 10px; padding: 8px 10px; } .stat .v { font-family: var(--mono); font-size: 20px; font-weight: 700; }
+.inc { display: flex; flex-direction: column; gap: 6px; }
+.inc .i { display: grid; grid-template-columns: 44px minmax(0, 1fr) 50px; gap: 10px; padding: 8px 10px; border-radius: 8px; background: var(--panel2); font-size: 13px; }
+.inc .i .tt { font-family: var(--mono); color: var(--muted); } .inc .i .p { font-family: var(--mono); font-weight: 700; text-align: right; } .inc .i .p.neg { color: var(--red); } .inc .i .p.pos { color: var(--green); }
+.inc .i .k { color: var(--muted); display: block; }
+.big-stars { font-size: 34px; letter-spacing: 6px; color: var(--amber); }
+.big-stars .off { color: #34506E; }
+.fatal { padding: 20px; border: 1px solid var(--red); border-radius: 12px; background: var(--red-bg); }
+
+
+/* main hero */
+.hero { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 24px; align-items: center; padding: clamp(20px, 4vw, 40px); border-radius: 18px; border: 1px solid var(--line);
+  background: radial-gradient(120% 140% at 0% 0%, #1D3A5C 0%, #0E1D2E 55%, #0A1522 100%); min-height: 380px; }
+.hero h1 { font-size: clamp(34px, 6vw, 60px); line-height: 1.1; margin-top: 6px; }
+.hero .sub { color: #C9D6E2; font-size: 16px; margin-top: 12px; max-width: 56ch; }
+.hero-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
+.btn.big { padding: 14px 26px; font-size: 17px; border-radius: 12px; }
+.prog-line { margin-top: 14px; display: flex; gap: 8px; align-items: baseline; }
+.feats { display: flex; flex-direction: column; gap: 10px; }
+.feat { background: rgba(14,29,46,.75); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+.feat b { font-family: var(--display); color: var(--amber); }
+.feat span { color: #C9D6E2; font-size: 13px; }
+@media (max-width: 860px) { .hero { grid-template-columns: minmax(0, 1fr); } }
+/* in-view briefing */
+.bov { position: absolute; inset: 0; background: rgba(4,9,16,.72); display: grid; place-items: center; padding: 16px; overflow-y: auto; z-index: 5; }
+.bov-card { width: min(860px, 100%); background: rgba(14,29,46,.97); border: 1px solid var(--line); border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 12px; max-height: 100%; overflow-y: auto; }
+.bov-card h2 { font-size: 24px; }
+.bov-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 16px; }
+.bov .guide li { font-size: 13px; padding: 8px 10px; }
+.howto { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.howto div { background: var(--panel2); border-radius: 10px; padding: 8px 10px; font-size: 12px; color: #D5DEE7; }
+.howto b { display: block; color: var(--amber); font-size: 13px; }
+@media (max-width: 760px) { .bov-grid, .howto { grid-template-columns: minmax(0, 1fr); } }
+/* coach highlight */
+@keyframes coach { 0%,100% { box-shadow: 0 0 0 0 rgba(242,169,59,.9); } 50% { box-shadow: 0 0 0 6px rgba(242,169,59,0); } }
+.ab.coach { outline: 2px solid var(--amber); outline-offset: 1px; animation: coach 1.1s ease-in-out infinite; }
+.ab.coach::after { content: " ◀"; color: var(--amber); }
+.lb .acts .ab.coach::after { content: ""; }
+@media (prefers-reduced-motion: reduce) { .ab.coach { animation: none; } }
+@keyframes pop { from { transform: scale(.97); opacity: .4; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .card { animation: none; } .mcard { transition: none; } }
+@media (max-width: 1080px) { .game { grid-template-columns: minmax(0, 1fr); } .view { height: 58vh; min-height: 340px; } .brief { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 560px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .top .r { width: 100%; justify-content: space-between; gap: 10px; } .legend { display: none; } }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <!-- MENU -->
+  <section id="menu">
+    <div class="wrap">
+      <div class="hero">
+        <div class="hero-txt">
+          <p class="label">드론 관제 · 단계별 훈련</p>
+          <h1>드론 관제 미션</h1>
+          <p class="sub">도심 드론 버티포트의 관제사가 되어 실사풍 3D 현장을 보며 착륙 · 출발을 지시하고 돌발 상황에 대응합니다. 쉬운 미션 1부터 시작해 15단계까지 올라가세요.</p>
+          <div class="hero-actions">
+            <button class="btn primary big" id="m-start">미션 시작</button>
+            <button class="btn big" id="m-continue" hidden></button>
+            <button class="btn big" id="m-list" aria-expanded="false">미션 선택</button>
+          </div>
+          <p class="prog-line"><span class="label">진행</span> <span class="prog" id="progress">0 / 15</span></p>
+        </div>
+        <div class="feats">
+          <div class="feat"><b>15단계 미션</b><span>착륙 · 출발부터 돌풍, 비상 착륙, 화재, 드론 침입, 복합 상황까지 차례로</span></div>
+          <div class="feat"><b>현장에서 배우는 가이드</b><span>미션 화면에서 해야 할 일과 눌러야 할 버튼을 바로 알려 줍니다</span></div>
+          <div class="feat"><b>광역 · 현장 3D</b><span>다른 버티포트에서 오는 드론과 회랑 교통을 보며 우리 버티포트를 운영합니다</span></div>
+        </div>
+      </div>
+      <div id="mlist" hidden>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px"><p class="label">미션 선택 · 열린 미션을 누르면 바로 시작합니다</p><button class="btn" id="reset" style="font-size:12px;padding:4px 10px">진행 초기화</button></div>
+        <div id="tiers"></div>
+      </div>
+      <p class="label" style="font-weight:400;letter-spacing:0">교육용 게임입니다. 3D 장면은 브라우저에서 실시간으로 그리며, 성능이 낮은 기기에서는 느릴 수 있습니다. 지명 · 호출부호 · 수치 기준은 가정한 예시이며, 실제 근무에서는 소속 기관의 운영 규정을 따릅니다.</p>
+    </div>
+  </section>
+
+  <!-- GAME -->
+  <section id="gamebox" hidden>
+    <div class="wrap">
+      <div class="top">
+        <div class="l"><button class="btn" id="g-quit" style="padding:5px 10px;font-size:12px">← 그만두기</button><span class="label" id="g-no"></span><h1 id="g-title"></h1></div>
+        <div class="r">
+          <div class="kv"><span class="label">남은 시간</span><span class="v big" id="g-clock">0:00</span></div>
+          <div class="kv"><span class="label">점수</span><span class="v" id="g-score">0</span></div>
+          <div class="kv"><span class="label">위반</span><span class="v" id="g-viol">0</span></div>
+          <label class="switch"><input type="checkbox" id="g-assist"> 가이드</label>
+          <button class="btn" id="g-pause" style="padding:6px 12px">일시정지</button>
+        </div>
+      </div>
+      <div class="game">
+        <div class="col">
+          <div class="view" id="view">
+            <div id="labels"></div>
+            <div class="hint" id="hint" hidden></div>
+            <div class="vtools"><button class="btn" data-cam="wide">광역</button><button class="btn" data-cam="near">버티포트</button><button class="btn" data-cam="tower">관제석</button><button class="btn" data-cam="follow">선택 기체 추적</button><button class="btn" id="hudbtn" aria-pressed="true">HUD</button><button class="btn" id="howbtn">설명</button></div>
+            <div class="flags" id="flags"></div>
+            <div class="legend"><i style="background:#F2A93B"></i>도착<i style="background:#5AA6EE"></i>출발<i style="background:#EF6A55"></i>비상<i style="background:#8E9AA8"></i>통과 · 두절</div>
+            <div class="toast" id="toast" hidden></div>
+            <div class="bov" id="bov" hidden></div>
+          </div>
+        </div>
+        <div class="col">
+          <div id="cardbox"></div>
+          <div class="panel"><p class="label" style="margin-bottom:6px">요청 · 지시 (누르면 바로 지시)</p><div class="queue" id="queue" style="max-height:300px"></div></div>
+          <div class="panel board">
+            <p class="label">상황판 · 미션 목표</p>
+            <div class="gl" id="goals"></div>
+            <div style="margin-top:10px;border-top:1px dashed var(--line);padding-top:8px">
+              <div class="row"><span class="k">FATO 1</span><span class="v" id="s-fato"></span></div>
+              <div class="row"><span class="k">바람</span><span class="v" id="s-wind"></span></div>
+              <div class="row" id="s-sector-row"><span class="k">최종접근 구역</span><span class="v" id="s-sector"></span></div>
+              <div class="row"><span class="k">관리시스템</span><span class="v" id="s-sys"></span></div>
+              <div class="stands" id="s-stands"></div>
+            </div>
+          </div>
+          <div class="panel"><details class="mg" id="mguide"><summary>이 미션의 행동 가이드</summary><ol id="g-guide"></ol></details></div>
+          <div class="panel"><p class="label" style="margin-bottom:6px">교신 · 경보 기록</p><div class="log" id="log" aria-live="polite"></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="overlay" id="pausebox" hidden><div class="dialog" style="width:min(420px,100%);text-align:center"><h2>일시정지</h2><p style="color:var(--muted)">시간이 멈춰 있습니다.</p><button class="btn primary" id="resume">계속하기</button></div></div>
+<div class="overlay" id="endbox" hidden><div class="dialog" id="enddialog"></div></div>
+
+<script src="lib/three.min.js"></script>
+<script src="lib/OrbitControls.js"></script>
+<script src="lib/Sky.js"></script>
+<script>
+/* =========================================================
+   MISSIONS
+   ========================================================= */
+const EV_GUIDE = {
+  gust: ['돌풍 경보가 뜨면 신규 출발을 멈춥니다.', '최종접근 중인 기체는 즉시 복행 · 대기시킵니다.', '대기 기체의 배터리를 보며 경보가 풀리길 기다립니다. 배터리가 부족하면 대체 버티포트로 전환합니다.', '경보가 해제되면 공중 기체부터 착륙시킵니다.'],
+  fod: ['FATO 위 이물질을 발견하면 FATO 사용을 멈춥니다.', '접근기는 복행 · 대기시킵니다.', '점검 · 제거가 끝날 때까지 이착륙하지 않습니다.', '점검이 끝나면 운영을 재개합니다.'],
+  mayday: ['비상기를 접수하고 최우선 착륙시킵니다.', '다른 접근기는 복행 · 대기, 출발기는 지상에서 대기시킵니다.', '소방 대기를 요청합니다.', '비상기가 FATO를 비우면 정상 운영으로 돌아갑니다.'],
+  nordo: ['교신이 끊긴 기체는 예비 수단으로 호출합니다.', '두절 기체는 사전 절차대로 약 15초 뒤 스스로 접근합니다.', '그 시간에 FATO와 최종접근 경로를 비워 둡니다. 출발은 보류합니다.', '착륙 후 교신이 복구되면 평소처럼 처리합니다.'],
+  drone: ['미확인 드론이 탐지되면 접근 · 출발을 멈춥니다.', '접근기는 복행 · 대기시킵니다.', '경찰에 신고하고 위치를 기록합니다. 무력화는 권한 기관만 합니다.', '드론 이탈이 확인되면 재개합니다.'],
+  fire: ['충전 전원을 차단하고 소방에 신고, 주변 인원을 대피시킵니다.', 'FATO를 닫고 접근기는 대기 또는 전환합니다.', '화재 스탠드는 남은 시간 동안 쓸 수 없습니다. 남은 스탠드로 운영합니다.', 'FATO 폐쇄가 풀리면 공중 기체부터 처리합니다.'],
+  sys: ['관리시스템이 멈추면 수동 절차로 전환합니다.', '배터리 · 대기시간 정보가 보이지 않으니 대기 시작 순서를 기억해 처리합니다.', '신규 출발은 보류하고 공중 기체부터 착륙시킵니다.', '시스템이 복구되면 출발을 재개합니다.']
+};
+const BASE_GUIDE = {
+  land: '도착기가 대기 지점(N1 · S1)에서 선회하며 착륙을 요청하면 <b>착륙 허가</b>를 누릅니다.',
+  stand: '착륙한 기체는 FATO를 막고 있습니다. 바로 <b>스탠드 배정</b>으로 FATO를 비웁니다.',
+  depart: '턴어라운드가 끝난 기체가 요청하면 <b>지상이동</b>으로 FATO에 올리고, <b>이륙 허가</b>를 냅니다.',
+  one: 'FATO는 한 번에 한 기체만. 착륙 · 이동 · 이륙이 겹치지 않게 합니다.'
+};
+const MISSIONS = [
+  { id:1, tier:1, title:'첫 착륙', skill:'착륙 · 스탠드 배정', min:2, cam:'near', assist:true, stands:['A','B','C'],
+    story:'근무 첫날입니다. 김포 방면에서 도착기 2대가 들어옵니다. 착륙을 허가하고 스탠드로 보내 FATO를 비우세요.',
+    guide:[BASE_GUIDE.land, '착륙하면 FATO가 노란색(점유)으로 바뀝니다.', BASE_GUIDE.stand, '두 번째 기체도 같은 순서로 처리합니다.'],
+    goals:{ park:2 }, limit:3, script:[{t:2,o:'김포'},{t:35,o:'수서'}], spawn:null, transit:false, events:[],
+    tip:'화면의 기체 이름표나 오른쪽 요청 카드의 버튼을 누르면 바로 지시됩니다. 마우스 드래그로 시점을 돌리고 휠로 확대합니다.' },
+  { id:2, tier:1, title:'첫 출발', skill:'지상이동 · 이륙 허가', min:2, cam:'near', assist:true, stands:['A','B','C'],
+    story:'스탠드에서 턴어라운드 중인 기체 2대를 차례로 출발시키세요. 출발기는 이륙 후 회랑으로 넘어갑니다.',
+    guide:['턴어라운드가 끝나면 기체가 지상이동을 요청합니다.', '<b>지상이동</b>을 누르면 스탠드에서 FATO로 이동합니다.', 'FATO에 올라서면 이륙을 요청합니다. <b>이륙 허가</b>를 냅니다.', '한 대가 FATO를 떠난 뒤에 다음 기체를 올립니다.'],
+    goals:{ dep:2 }, limit:3, init:[{s:'A',turn:4},{s:'B',turn:24}], script:[], spawn:null, transit:false, events:[],
+    tip:'FATO 위에 기체가 있을 때 다른 기체를 올리면 분리 위반입니다.' },
+  { id:3, tier:1, title:'도착과 출발 함께', skill:'공중 기체 우선', min:3, cam:'near', assist:true, stands:['A','B','C'],
+    story:'도착기와 출발기가 섞여 들어옵니다. FATO 하나를 번갈아 쓰면서 순서를 정하세요.',
+    guide:[BASE_GUIDE.one, '도착기와 출발기가 동시에 요청하면 <b>공중에 있는 도착기를 먼저</b> 내립니다. 출발기는 지상에서 기다리는 편이 안전합니다.', '도착기가 최종접근 중이면 이륙 허가를 내지 않습니다.', BASE_GUIDE.stand],
+    goals:{ land:3, dep:2 }, limit:3, init:[{s:'A',turn:8}], script:[{t:3,o:'여의도'}], spawn:{ every:24, max:2, bat:[60,80] }, transit:false, events:[],
+    tip:'요청 카드의 버튼에 ⚠ 표시가 있으면 지금 누르면 위반이라는 뜻입니다. 가이드 스위치로 켜고 끌 수 있습니다.' },
+  { id:4, tier:1, title:'대기 순서와 배터리', skill:'배터리 우선순위', min:3, cam:'near', assist:true, stands:['A','B','C'],
+    story:'여러 방향에서 도착기가 몰립니다. 공중 대기는 배터리를 씁니다. 배터리가 낮은 기체부터 내리세요.',
+    guide:['이름표 아래 막대와 요청 카드의 %가 배터리입니다.', '여러 대가 기다리면 <b>배터리가 낮은 기체</b>부터 착륙시킵니다.', '배터리 12%가 되면 배터리 비상이 선언되고 감점입니다. 0%면 강제 착륙으로 미션 실패입니다.', '도저히 못 내릴 상황이면 늦기 전에 <b>대체 버티포트 전환</b>을 씁니다.'],
+    goals:{ land:5 }, limit:3, script:[{t:2,o:'김포'},{t:6,o:'잠실'}], spawn:{ every:15, max:3, bat:[34,58] }, transit:false, events:[],
+    tip:'요청 카드는 비상 · 요청 순으로 정렬됩니다. 배터리 %를 보고 고르세요.' },
+  { id:5, tier:1, title:'스탠드 관리', skill:'갈 곳 먼저 확보', min:3, cam:'near', assist:true, stands:['A','B'],
+    story:'스탠드 C가 정비 중이라 스탠드 2개로 운영합니다. 착륙 후 들어갈 곳이 없으면 FATO가 막힙니다.',
+    guide:['착륙 허가 전에 <b>빈 스탠드가 있는지</b> 먼저 봅니다.', '스탠드가 모두 차 있으면 <b>출발기를 먼저 내보내</b> 스탠드를 비웁니다.', '스탠드 없이 착륙시키면 위반입니다.', '이미 막혔다면 <b>임시 주기장</b>으로 보내 승객을 내리게 합니다.'],
+    goals:{ land:4, dep:3 }, limit:3, init:[{s:'A',turn:10}], script:[{t:3,o:'수서'}], spawn:{ every:17, max:3, bat:[50,72] }, transit:false, events:[],
+    tip:'상황판의 스탠드 칸에서 사용 중 · 비어 있음 · 정비를 확인하세요.' },
+  { id:6, tier:2, title:'광역 교통: 통과 회랑', skill:'통과 교통 분리', min:3, cam:'wide', assist:true, stands:['A','B','C'],
+    story:'김포–잠실 회랑을 지나는 통과 기체가 우리 최종접근 구역을 가로지릅니다. 광역 화면으로 다른 지역에서 오는 기체를 보며 운영하세요.',
+    guide:['광역 화면에서 회랑(점선)을 따라 오는 회색 통과 기체를 봅니다.', '최종접근 구역이 <b>노란색</b>이면 통과 기체가 다가오는 중입니다. 새 착륙 · 이륙 허가를 보류합니다.', '구역이 <b>빨간색</b>이면 통과 기체가 구역 안에 있습니다. 최종접근 중인 기체는 <b>복행 · 대기</b>시킵니다.', '통과 기체가 지나가면 다시 허가합니다.'],
+    goals:{ land:4, dep:3 }, limit:3, init:[{s:'A',turn:12}], script:[{t:3,o:'김포'}], spawn:{ every:17, max:3, bat:[52,74] }, transit:true, events:[],
+    tip:'통과 기체는 우리 관할이 아니라 지시할 수 없습니다. 우리 기체를 조정해 간격을 만듭니다.' },
+  { id:7, tier:2, title:'돌풍', skill:'기상 급변', min:3, cam:'near', assist:true, stands:['A','B','C'],
+    story:'오후에 빌딩풍이 강해진다는 예보입니다. 돌풍 경보가 뜨면 절차대로 대응하세요.',
+    guide:EV_GUIDE.gust, goals:{ land:4, dep:2, ev:1 }, limit:3, init:[{s:'A',turn:14}], script:[{t:3,o:'여의도'}], spawn:{ every:18, max:3, bat:[55,75] }, transit:false, events:[{k:'gust',t:45}],
+    tip:'상황이 터지면 오른쪽에 상황 카드가 뜹니다. 20초 안에 올바른 조치를 고르면 그 조치가 자동으로 실행됩니다.' },
+  { id:8, tier:2, title:'FATO 이물질', skill:'FOD 대응', min:3, cam:'near', assist:true, stands:['A','B','C'],
+    story:'바람에 비닐 조각이 날아들 수 있습니다. FATO에 이물질이 보이면 즉시 닫고 점검하세요.',
+    guide:EV_GUIDE.fod, goals:{ land:4, dep:3, ev:1 }, limit:3, init:[{s:'B',turn:10}], script:[{t:3,o:'잠실'}], spawn:{ every:17, max:3, bat:[55,75] }, transit:false, events:[{k:'fod',t:50}],
+    tip:'점검 중에는 FATO 위에 남은 시간이 표시됩니다.' },
+  { id:9, tier:2, title:'비상 착륙', skill:'MAYDAY 처리', min:3, cam:'near', assist:false, stands:['A','B','C'],
+    story:'접근 중인 기체에서 배터리 셀 과열이 보고될 수 있습니다. 비상기는 모든 것보다 우선합니다.',
+    guide:EV_GUIDE.mayday, goals:{ land:4, emg:1, ev:1 }, limit:3, init:[{s:'A',turn:16}], script:[{t:3,o:'김포'}], spawn:{ every:17, max:3, bat:[55,75] }, transit:false, events:[{k:'mayday',t:48}],
+    tip:'이번 미션부터 가이드(⚠ 표시와 힌트)는 꺼진 채로 시작합니다. 필요하면 상단 스위치로 켜세요.' },
+  { id:10, tier:2, title:'통신 두절', skill:'두절 기체 처리', min:3, cam:'wide', assist:false, stands:['A','B','C'],
+    story:'대기 중인 기체 하나와 교신이 끊길 수 있습니다. 두절 기체는 지시를 받지 못하고 정해진 절차대로 들어옵니다.',
+    guide:EV_GUIDE.nordo, goals:{ land:4, ev:1 }, limit:3, init:[{s:'B',turn:14}], script:[{t:3,o:'수서'},{t:10,o:'여의도'}], spawn:{ every:18, max:3, bat:[55,75] }, transit:false, events:[{k:'nordo',t:45}],
+    tip:'두절 기체 위에는 접근까지 남은 시간이 표시됩니다.' },
+  { id:11, tier:3, title:'미확인 드론', skill:'드론 침입 대응', min:3.5, cam:'wide', assist:false, stands:['A','B','C'],
+    story:'통과 회랑이 열린 상태에서 접근 경로 근처에 미확인 드론이 나타날 수 있습니다.',
+    guide:EV_GUIDE.drone, goals:{ land:5, dep:3, ev:1 }, limit:3, init:[{s:'A',turn:12}], script:[{t:3,o:'김포'}], spawn:{ every:16, max:3, bat:[52,74] }, transit:true, events:[{k:'drone',t:60}],
+    tip:'드론은 빨간 고리로 표시됩니다. 머무는 동안에는 이착륙하지 않습니다.' },
+  { id:12, tier:3, title:'스탠드 배터리 화재', skill:'화재 대응', min:4, cam:'near', assist:false, stands:['A','B','C'],
+    story:'충전 중인 기체에서 열폭주가 일어날 수 있습니다. 화재 뒤에는 남은 스탠드로 운영해야 합니다.',
+    guide:EV_GUIDE.fire, goals:{ land:5, dep:3, ev:1 }, limit:3, init:[{s:'A',turn:18},{s:'B',turn:30}], script:[{t:3,o:'잠실'}], spawn:{ every:17, max:3, bat:[55,75] }, transit:false, events:[{k:'fire',t:55}],
+    tip:'FATO 폐쇄 20초 동안 배터리가 부족한 기체는 전환하는 것이 맞습니다. 이때 전환은 감점이 없습니다.' },
+  { id:13, tier:3, title:'관리시스템 장애', skill:'수동 운영', min:4, cam:'near', assist:false, stands:['A','B','C'],
+    story:'버티포트 관리시스템이 멈추면 배터리와 대기시간 정보가 사라집니다. 기억과 원칙으로 운영하세요.',
+    guide:EV_GUIDE.sys, goals:{ land:5, dep:4, ev:1 }, limit:3, init:[{s:'A',turn:10},{s:'C',turn:22}], script:[{t:3,o:'김포'}], spawn:{ every:16, max:3, bat:[52,74] }, transit:true, events:[{k:'sys',t:60}],
+    tip:'장애 중 이륙 허가는 위반입니다.' },
+  { id:14, tier:3, title:'복합 상황: 악기상 속 비상', skill:'복합 판단', min:4, cam:'wide', assist:false, stands:['A','B','C'],
+    story:'돌풍이 부는 가운데 비상기가 생기고, 이어서 이물질까지 발견됩니다. 우선순위를 놓치지 마세요.',
+    guide:['돌풍 중에는 비상기라도 바로 내리기보다 경보 해제 직후 최우선으로 내립니다. 배터리가 버티지 못하면 전환합니다.', '비상기가 있으면 다른 기체의 착륙 · 이륙을 미룹니다.', '이물질이 발견되면 FATO를 닫고 점검합니다.', '각 상황 카드에서 올바른 조치를 고르면 복행 등이 자동으로 실행됩니다.'],
+    goals:{ land:6, dep:4, emg:1, ev:3 }, limit:3, init:[{s:'A',turn:12},{s:'B',turn:26}], script:[{t:3,o:'여의도'},{t:8,o:'김포'}], spawn:{ every:15, max:4, bat:[55,78] }, transit:true, events:[{k:'gust',t:40},{k:'mayday',t:62},{k:'fod',t:150}],
+    tip:'광역 화면으로 시작합니다. 필요하면 버티포트 화면으로 바꿔 가며 보세요.' },
+  { id:15, tier:3, title:'최종 근무', skill:'종합 평가', min:5, cam:'wide', assist:false, stands:['A','B','C'],
+    story:'5분 동안 바쁜 오후 근무를 맡습니다. 어떤 상황이 언제 올지 알 수 없습니다. 지금까지 배운 원칙으로 운영하세요.',
+    guide:['공중 기체 우선, 배터리 낮은 순서.', '갈 스탠드를 먼저 확보한 뒤 착륙.', '통과 교통 · 위험 상황 중에는 이착륙 보류, 접근기는 복행.', '비상 · 두절 기체가 있으면 FATO와 접근 경로를 비워 둠.'],
+    goals:{ land:9, dep:6, ev:5 }, limit:4, init:[{s:'A',turn:10},{s:'B',turn:22}], script:[{t:3,o:'김포'},{t:9,o:'잠실'}], spawn:{ every:14, max:4, bat:[55,78] }, transit:true, events:'random',
+    tip:'상황 6개 중 5개 이상을 올바르게 처리해야 합니다.' }
+];
+const TIER_NAME = { 1:['기초 운영','착륙 · 출발 · 순서 · 스탠드'], 2:['상황 대응 입문','광역 교통과 단일 상황'], 3:['고급 상황 · 종합','복합 상황과 최종 평가'] };
+const GOAL_TXT = { park:'스탠드 배정', land:'착륙', dep:'출발', emg:'비상기 착륙', ev:'상황 카드 올바른 조치' };
+
+/* =========================================================
+   PROGRESS
+   ========================================================= */
+const PKEY = 'vtp3d-progress-v1';
+function loadProg(){ try { const p = JSON.parse(localStorage.getItem(PKEY)); if (p && p.unlocked) return p; } catch(e){} return { unlocked:1, stars:{} }; }
+function saveProg(p){ try { localStorage.setItem(PKEY, JSON.stringify(p)); } catch(e){} }
+let PROG = loadProg();
+
+/* =========================================================
+   HELPERS
+   ========================================================= */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const strip = s => String(s).replace(/<[^>]+>/g, '');
+const rnd = (a,b) => a + Math.random()*(b-a);
+const fmt = t => { t = Math.max(0, Math.ceil(t)); return Math.floor(t/60)+':'+String(t%60).padStart(2,'0'); };
+function show(id){ ['menu','gamebox'].forEach(x => $('#'+x).hidden = (x!==id)); window.scrollTo(0,0); }
+const stars = n => [1,2,3].map(i => i<=n ? '★' : '<span class="off">★</span>').join('');
+
+/* =========================================================
+   MENU & BRIEFING
+   ========================================================= */
+function renderMenu(){
+  $('#progress').textContent = `${Object.keys(PROG.stars).length} / 15 완료`;
+  let h = '';
+  [1,2,3].forEach(t => {
+    h += `<div class="tier"><h2>${TIER_NAME[t][0]} <span>${TIER_NAME[t][1]}</span></h2><div class="mgrid">`;
+    MISSIONS.filter(m => m.tier===t).forEach(m => {
+      const locked = m.id > PROG.unlocked; const st = PROG.stars[m.id] || 0;
+      h += `<button class="mcard" data-id="${m.id}" ${locked?'disabled':''}><span class="no">미션 ${m.id}</span><h3>${esc(m.title)}</h3><span class="skill">${esc(m.skill)}</span><p class="d">${esc(m.story.split('.')[0])}.</p>
+        <div class="meta"><span>${m.min}분 · ${locked?'잠김':'열림'}</span><span class="stars">${stars(st)}</span></div></button>`;
+    });
+    h += `</div></div>`;
+  });
+  $('#tiers').innerHTML = h;
+  const nx = nextMissionId(); const c = $('#m-continue'); c.hidden = nx <= 1; c.textContent = `이어하기 · 미션 ${nx}`;
+  document.querySelectorAll('.mcard').forEach(b => b.onclick = () => openBrief(+b.dataset.id));
+}
+$('#reset').onclick = () => { const b = $('#reset'); if (b.dataset.confirm){ PROG = { unlocked:1, stars:{} }; saveProg(PROG); renderMenu(); b.textContent='진행 초기화'; delete b.dataset.confirm; } else { b.dataset.confirm = '1'; b.textContent = '한 번 더 누르면 초기화'; setTimeout(() => { b.textContent='진행 초기화'; delete b.dataset.confirm; }, 3000); } };
+function openBrief(id){ startMission(MISSIONS.find(x => x.id===id)); }
+function nextMissionId(){ return Math.min(15, PROG.unlocked); }
+$('#m-start').onclick = () => openBrief(1);
+$('#m-continue').onclick = () => openBrief(nextMissionId());
+$('#m-list').onclick = () => { const l = $('#mlist'); l.hidden = !l.hidden; $('#m-list').setAttribute('aria-expanded', !l.hidden); };
+
+/* =========================================================
+   WORLD GEOMETRY (units ≈ meters)
+   ========================================================= */
+const ROOF = 40;
+const W = {
+  FATO:[-20,ROOF+2,0], TAXI:[14,ROOF+2,0], APRON:[-20,ROOF+2,40],
+  STAND:{ A:[42,ROOF+2,-27], B:[42,ROOF+2,0], C:[42,ROOF+2,27] },
+  FINAL:[-150,82,0], HOLD:{ N1:[-130,104,-130], S1:[-130,104,130] }, HR:24,
+  CLIMB:[-20,135,0],
+  ENTRY:{ N1:[-280,135,-250], S1:[-280,135,250] },
+  SECTOR:{ x0:-240, x1:-55, z0:-70, z1:70 }
+};
+const PORTS = [
+  { name:'김포', pos:[-620,0,-320], side:'N1' },
+  { name:'수서', pos:[460,0,-420], side:'N1' },
+  { name:'여의도', pos:[-500,0,330], side:'S1' },
+  { name:'잠실', pos:[560,0,300], side:'S1' }
+];
+const PORT = n => PORTS.find(p => p.name===n);
+const CRUISE = 150;
+const TRANSIT_ROUTE = [[-620,CRUISE,-320],[-300,CRUISE-30,-60],[-150,CRUISE-40,0],[0,CRUISE-30,120],[560,CRUISE,300]]; // Gimpo -> Jamsil, crosses our final
+const VISUAL_ROUTE = [[460,CRUISE+20,-420],[260,CRUISE+20,-60],[180,CRUISE+20,180],[-500,CRUISE+20,330]]; // Suseo -> Yeouido, far east
+
+/* =========================================================
+   THREE SETUP — physically based look
+   ========================================================= */
+let R = null; // renderer bundle
+function initThree(){
+  if (R) return true;
+  if (!window.THREE){ return false; }
+  const view = $('#view');
+  let renderer;
+  try { renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' }); } catch(e){ return false; }
+  renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 0.62;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  view.insertBefore(renderer.domElement, view.firstChild);
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(45, 1, 1, 14000);
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxPolarAngle = 1.48; controls.minDistance = 25; controls.maxDistance = 2200;
+  R = { renderer, scene, camera, controls, view, objs:{}, camAnim:null, camMode:'near', hud:true, glows:[] };
+  buildSky(); buildWorld();
+  const ro = () => { const w = view.clientWidth, h = view.clientHeight; if (!w || !h) return; renderer.setSize(w, h, false); camera.aspect = w/h; camera.updateProjectionMatrix(); };
+  window.addEventListener('resize', ro); new ResizeObserver(ro).observe(view); ro();
+  return true;
+}
+const D2R = Math.PI/180;
+function buildSky(){
+  const S = R.scene;
+  const sun = new THREE.Vector3(); sun.setFromSphericalCoords(1, (90-11)*D2R, 245*D2R);
+  if (THREE.Sky){
+    const sky = new THREE.Sky(); sky.scale.setScalar(12000);
+    const u = sky.material.uniforms; u.turbidity.value = 4.5; u.rayleigh.value = 2.6; u.mieCoefficient.value = 0.005; u.mieDirectionalG.value = 0.86; u.sunPosition.value.copy(sun);
+    S.add(sky);
+    try { const pm = new THREE.PMREMGenerator(R.renderer); S.environment = pm.fromScene(sky).texture; } catch(e){}
+  } else { S.background = new THREE.Color(0x7E93AA); }
+  S.fog = new THREE.FogExp2(0x8496AA, 0.00034);
+  const dl = new THREE.DirectionalLight(0xFFCF9A, 2.3); dl.position.copy(sun).multiplyScalar(900); dl.target.position.set(-40, 0, 0);
+  dl.castShadow = true; dl.shadow.mapSize.set(2048, 2048);
+  const c = dl.shadow.camera; c.left = -330; c.right = 330; c.top = 330; c.bottom = -330; c.near = 50; c.far = 2400;
+  dl.shadow.bias = -0.0005; dl.shadow.normalBias = 0.8;
+  S.add(dl); S.add(dl.target);
+  S.add(new THREE.HemisphereLight(0xB4CBE4, 0x3A3024, 0.45));
+  R.sunDir = sun;
+}
+
+/* ---------- materials & textures ---------- */
+function std(color, rough, metal, extra){ return new THREE.MeshStandardMaterial(Object.assign({ color, roughness: rough ?? 0.8, metalness: metal ?? 0.0 }, extra||{})); }
+function ctex(w, h, draw, srgb){ const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); if (srgb !== false) t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; }
+const GLOW_TEX = () => R.glowTex || (R.glowTex = ctex(64, 64, (g,w,h) => { const r = g.createRadialGradient(32,32,0,32,32,32); r.addColorStop(0,'rgba(255,255,255,1)'); r.addColorStop(0.25,'rgba(255,255,255,.55)'); r.addColorStop(1,'rgba(255,255,255,0)'); g.fillStyle = r; g.fillRect(0,0,w,h); }));
+function glowMat(color, opacity){ return new THREE.SpriteMaterial({ map:GLOW_TEX(), color, blending:THREE.AdditiveBlending, depthWrite:false, transparent:true, opacity: opacity ?? 1, fog:true }); }
+function glow(material, size){ const s = new THREE.Sprite(material); s.scale.set(size, size, 1); return s; }
+function facade(kind){
+  const P = {
+    office:{ frame:'#8C9096', glass:[34,48,66], lit:0.14, cols:8, rows:16, inset:[0.14,0.2] },
+    glass: { frame:'#1E2A36', glass:[28,44,64], lit:0.12, cols:10, rows:18, inset:[0.05,0.08] },
+    resi:  { frame:'#B9A88E', glass:[40,44,50], lit:0.2, cols:6, rows:16, inset:[0.22,0.26] },
+    tower: { frame:'#2B3D4C', glass:[30,58,74], lit:0.16, cols:10, rows:16, inset:[0.05,0.1] }
+  }[kind];
+  const lits = [];
+  const map = ctex(256, 512, (g,w,h) => {
+    g.fillStyle = P.frame; g.fillRect(0,0,w,h);
+    const cw = w/P.cols, rh = h/P.rows;
+    for (let r=0;r<P.rows;r++) for (let c=0;c<P.cols;c++){
+      const x = c*cw + cw*P.inset[0], y = r*rh + rh*P.inset[1], ww = cw*(1-2*P.inset[0]), hh = rh*(1-2*P.inset[1]);
+      const lit = Math.random() < P.lit; const v = Math.random()*14;
+      const gr = g.createLinearGradient(0, y, 0, y+hh);
+      if (lit){ gr.addColorStop(0,'rgb(255,214,150)'); gr.addColorStop(1,'rgb(214,160,96)'); lits.push([x,y,ww,hh]); }
+      else { gr.addColorStop(0,`rgb(${P.glass[0]+v+18},${P.glass[1]+v+22},${P.glass[2]+v+30})`); gr.addColorStop(1,`rgb(${P.glass[0]+v},${P.glass[1]+v},${P.glass[2]+v})`); }
+      g.fillStyle = gr; g.fillRect(x, y, ww, hh);
+    }
+    g.fillStyle = 'rgba(0,0,0,.18)'; for (let r=0;r<P.rows;r++) g.fillRect(0, r*rh, w, Math.max(1, rh*0.06));
+  });
+  const em = ctex(256, 512, (g,w,h) => { g.fillStyle = '#000'; g.fillRect(0,0,w,h); lits.forEach(([x,y,ww,hh]) => { g.fillStyle = `rgba(255,${190+Math.random()*40|0},${110+Math.random()*50|0},${0.6+Math.random()*0.4})`; g.fillRect(x,y,ww,hh); }); });
+  const glassy = kind==='glass' || kind==='tower';
+  return std(0xFFFFFF, glassy ? 0.22 : 0.7, glassy ? 0.55 : 0.1, { map, emissive:0xFFFFFF, emissiveMap:em, emissiveIntensity:0.7, envMapIntensity: glassy ? 1.2 : 0.5 });
+}
+/* box with scaled UVs, split into side + roof index sets */
+function boxParts(w, h, d, x, y, z){
+  const g = new THREE.BoxGeometry(w, h, d); g.translate(x, y, z);
+  const uv = g.attributes.uv;
+  for (let f=0; f<6; f++){ const su = f<2 ? d/32 : f<4 ? w/24 : w/32, sv = f<2 ? h/57.6 : f<4 ? d/24 : h/57.6; for (let i=0;i<4;i++){ const k = f*4+i; uv.setXY(k, uv.getX(k)*su, uv.getY(k)*sv); } }
+  const idx = g.index.array; const side = [], top = [];
+  [0,1,4,5].forEach(f => { for (let i=0;i<6;i++) side.push(idx[f*6+i]); });
+  for (let i=0;i<6;i++) top.push(idx[2*6+i]);
+  return { g, side, top };
+}
+function merge(parts, which){
+  let nv = 0, ni = 0; parts.forEach(p => { nv += p.g.attributes.position.count; ni += p[which].length; });
+  const pos = new Float32Array(nv*3), nor = new Float32Array(nv*3), uvs = new Float32Array(nv*2), ind = new Uint32Array(ni);
+  let vo = 0, io = 0;
+  parts.forEach(p => { const a = p.g.attributes; pos.set(a.position.array, vo*3); nor.set(a.normal.array, vo*3); uvs.set(a.uv.array, vo*2); p[which].forEach(i => ind[io++] = i + vo); vo += a.position.count; });
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos,3)); g.setAttribute('normal', new THREE.BufferAttribute(nor,3)); g.setAttribute('uv', new THREE.BufferAttribute(uvs,2)); g.setIndex(new THREE.BufferAttribute(ind,1));
+  g.computeBoundingSphere(); return g;
+}
+function textSprite(text, color, size, fixed){
+  const c = document.createElement('canvas'); const ctx = c.getContext('2d'); const fs = 48;
+  ctx.font = `700 ${fs}px "Noto Sans KR", sans-serif`; const w = Math.ceil(ctx.measureText(text).width) + 30;
+  c.width = w; c.height = fs + 26; ctx.font = `700 ${fs}px "Noto Sans KR", sans-serif`;
+  ctx.fillStyle = 'rgba(8,19,31,0.72)'; ctx.fillRect(0,0,c.width,c.height);
+  ctx.fillStyle = color || '#E9EEF3'; ctx.textBaseline = 'middle'; ctx.fillText(text, 15, c.height/2 + 2);
+  const tex = new THREE.CanvasTexture(c); tex.minFilter = THREE.LinearFilter; tex.encoding = THREE.sRGBEncoding;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, depthWrite:false, depthTest:!fixed, transparent:true, fog:false, sizeAttenuation:!fixed }));
+  const s = fixed ? fixed : (size || 20); sp.scale.set(s * c.width / c.height, s, 1); if (fixed) sp.renderOrder = 5; sp.userData.hud = true; return sp;
+}
+function dashed(pts, color, dash, gap, opacity){
+  const g = new THREE.BufferGeometry().setFromPoints(pts.map(p => new THREE.Vector3(p[0],p[1],p[2])));
+  const l = new THREE.Line(g, new THREE.LineDashedMaterial({ color, dashSize:dash||10, gapSize:gap||8, transparent:true, opacity: opacity ?? 0.8, fog:false }));
+  l.computeLineDistances(); l.userData.hud = true; return l;
+}
+function loop(center, r, y, color){ const pts = []; for (let i=0;i<=64;i++){ const a = i/64*Math.PI*2; pts.push([center[0]+Math.cos(a)*r, y, center[2]+Math.sin(a)*r]); } return dashed(pts, color, 6, 5, 0.7); }
+function hudAdd(o){ o.userData.hud = true; R.scene.add(o); (R.hudObjs = R.hudObjs || []).push(o); return o; }
+
+/* ---------- rooftop deck texture ---------- */
+function deckTexture(){
+  const PX = 14.6, W0 = 140, D0 = 110; const X = x => (x+70)*PX, Z = z => (z+55)*PX;
+  return ctex(Math.round(W0*PX), Math.round(D0*PX), (g, w, h) => {
+    g.fillStyle = '#6E7174'; g.fillRect(0,0,w,h);
+    for (let i=0;i<9000;i++){ const v = 95 + Math.random()*30|0; g.fillStyle = `rgba(${v},${v},${v+2},.18)`; g.fillRect(Math.random()*w, Math.random()*h, 2+Math.random()*3, 2+Math.random()*3); }
+    g.strokeStyle = 'rgba(40,40,40,.35)'; g.lineWidth = 2; for (let x=0;x<w;x+=6*PX){ g.beginPath(); g.moveTo(x,0); g.lineTo(x,h); g.stroke(); } for (let y=0;y<h;y+=6*PX){ g.beginPath(); g.moveTo(0,y); g.lineTo(w,y); g.stroke(); }
+    // edge hatch
+    g.save(); g.beginPath(); g.rect(0,0,w,h); g.rect(1.6*PX,1.6*PX,w-3.2*PX,h-3.2*PX); g.clip('evenodd'); g.fillStyle = '#D9A520'; g.fillRect(0,0,w,h); g.fillStyle = '#1C1C1C'; for (let i=-h;i<w;i+=2.4*PX){ g.beginPath(); g.moveTo(i,0); g.lineTo(i+1.2*PX,0); g.lineTo(i+1.2*PX+h,h); g.lineTo(i+h,h); g.fill(); } g.restore();
+    // safety area dashed
+    g.setLineDash([2*PX, 1.4*PX]); g.strokeStyle = '#F2F2EE'; g.lineWidth = 0.4*PX; g.strokeRect(X(-55), Z(-35), 70*PX, 70*PX); g.setLineDash([]);
+    // FATO
+    g.fillStyle = '#3F4346'; g.fillRect(X(-45), Z(-25), 50*PX, 50*PX);
+    g.strokeStyle = '#F4F4F0'; g.lineWidth = 0.9*PX; g.strokeRect(X(-45)+0.45*PX, Z(-25)+0.45*PX, 49.1*PX, 49.1*PX);
+    g.strokeStyle = '#F2C230'; g.lineWidth = 1.0*PX; g.beginPath(); g.arc(X(-20), Z(0), 15*PX, 0, Math.PI*2); g.stroke();
+    g.fillStyle = '#F4F4F0'; g.fillRect(X(-26.5), Z(-7), 2.4*PX, 14*PX); g.fillRect(X(-15.9), Z(-7), 2.4*PX, 14*PX); g.fillRect(X(-26.5), Z(-1.2), 13*PX, 2.4*PX);
+    g.font = `700 ${4*PX}px Arial`; g.fillText('1', X(-43), Z(-19)); g.save(); g.translate(X(-20), Z(22.5)); g.font = `700 ${2.2*PX}px Arial`; g.textAlign='center'; g.fillText('FATO 1', 0, 0); g.restore();
+    // taxi lines
+    g.strokeStyle = '#E8B91F'; g.lineWidth = 0.45*PX; g.beginPath(); g.moveTo(X(5),Z(0)); g.lineTo(X(14),Z(0)); g.moveTo(X(14),Z(-27)); g.lineTo(X(14),Z(27)); [-27,0,27].forEach(z => { g.moveTo(X(14),Z(z)); g.lineTo(X(30),Z(z)); }); g.stroke();
+    g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = 0.12*PX; g.stroke();
+    // stands
+    [['A',-27],['B',0],['C',27]].forEach(([s,z]) => { g.strokeStyle = '#F4F4F0'; g.lineWidth = 0.5*PX; g.strokeRect(X(29), Z(z-10), 26*PX, 20*PX); g.fillStyle = 'rgba(244,244,240,.85)'; g.font = `700 ${7*PX}px Arial`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(s, X(50), Z(z)); g.strokeStyle = '#E8B91F'; g.lineWidth = 0.35*PX; g.beginPath(); g.arc(X(42), Z(z), 4*PX, 0, Math.PI*2); g.stroke(); });
+    // apron
+    g.setLineDash([1.2*PX, 0.9*PX]); g.strokeStyle = '#E8B91F'; g.lineWidth = 0.4*PX; g.strokeRect(X(-34), Z(33), 28*PX, 16*PX); g.setLineDash([]);
+    g.fillStyle = 'rgba(232,185,31,.9)'; g.font = `700 ${2.2*PX}px "Noto Sans KR", sans-serif`; g.textAlign = 'center'; g.fillText('임시 주기', X(-20), Z(41));
+  });
+}
+function groundTexture(){
+  return ctex(512, 512, (g, w, h) => {
+    g.fillStyle = '#2A2D30'; g.fillRect(0,0,w,h);
+    for (let i=0;i<4000;i++){ const v = 40 + Math.random()*16|0; g.fillStyle = `rgba(${v},${v},${v},.35)`; g.fillRect(Math.random()*w, Math.random()*h, 2, 2); }
+    const r = w*0.08; // road half-width at each edge
+    g.fillStyle = '#8A8C8E'; g.fillRect(r, r, w-2*r, h-2*r);
+    g.fillStyle = '#3B3F3A'; g.fillRect(r+10, r+10, w-2*r-20, h-2*r-20);
+    g.fillStyle = 'rgba(70,90,60,.55)'; g.fillRect(r+18, r+18, w-2*r-36, h-2*r-36);
+    g.strokeStyle = 'rgba(230,230,220,.7)'; g.lineWidth = 2; g.setLineDash([14, 14]);
+    [[0,r/2,w,r/2],[0,h-r/2,w,h-r/2],[r/2,0,r/2,h],[w-r/2,0,w-r/2,h]].forEach(([a,b,c,d]) => { g.beginPath(); g.moveTo(a,b); g.lineTo(c,d); g.stroke(); });
+    g.setLineDash([]); g.strokeStyle = 'rgba(232,190,40,.8)'; g.lineWidth = 2;
+    [[0,1,w,1],[0,h-1,w,h-1],[1,0,1,h],[w-1,0,w-1,h]].forEach(([a,b,c,d]) => { g.beginPath(); g.moveTo(a,b); g.lineTo(c,d); g.stroke(); });
+  });
+}
+
+/* ---------- world ---------- */
+function buildWorld(){
+  const S = R.scene, O = R.objs;
+  // ground with road grid (roads at x,z = k*100+50)
+  const gt = groundTexture(); gt.repeat.set(40, 40); gt.offset.set(0.5, 0.5);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), std(0xFFFFFF, 0.95, 0, { map:gt })); ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; S.add(ground);
+  const plaza = new THREE.Mesh(new THREE.PlaneGeometry(250, 210), std(0x8E8F8C, 0.9)); plaza.rotation.x = -Math.PI/2; plaza.position.y = 0.15; plaza.receiveShadow = true; S.add(plaza);
+  // river, banks, bridges
+  const river = new THREE.Mesh(new THREE.PlaneGeometry(4000, 120), std(0x1E3A55, 0.08, 0.9, { envMapIntensity:1.4 })); river.rotation.x = -Math.PI/2; river.position.set(0, 0.35, 210); S.add(river);
+  [[140],[280]].forEach(([z]) => { const b = new THREE.Mesh(new THREE.PlaneGeometry(4000, 22), std(0x3C5634, 0.95)); b.rotation.x = -Math.PI/2; b.position.set(0, 0.3, z); b.receiveShadow = true; S.add(b); });
+  const conc = std(0xA7A8A4, 0.75);
+  [-380, -110, 170, 430].forEach(x => {
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(20, 2.2, 150), conc); deck.position.set(x, 11, 210); deck.castShadow = deck.receiveShadow = true; S.add(deck);
+    [170, 210, 250].forEach(z => { const p = new THREE.Mesh(new THREE.BoxGeometry(6, 10, 4), conc); p.position.set(x, 5, z); S.add(p); });
+    [-9.5, 9.5].forEach(dx => { const r = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.4, 150), std(0x5C6168, 0.5, 0.6)); r.position.set(x+dx, 12.8, 210); S.add(r); });
+  });
+  // city on block grid
+  const kinds = ['office','glass','resi','office'];
+  const mats = kinds.map(facade); const roofMat = std(0x55585B, 0.92);
+  const parts = kinds.map(() => []), roofs = [], beacons = [];
+  const avoid = [[0,0,140]].concat(PORTS.map(p => [p.pos[0], p.pos[2], 95]));
+  for (let bx=-1000; bx<=1000; bx+=100) for (let bz=-800; bz<=800; bz+=100){
+    if (Math.abs(bz-210) < 80) continue;
+    if (avoid.some(a => Math.hypot(bx-a[0], bz-a[1]) < a[2])) continue;
+    const dist = Math.hypot(bx, bz);
+    const clear = bx > -340 && bx < -40 && Math.abs(bz) < 110; // obstacle-free approach surface
+    const lots = Math.random() < 0.45 ? [[0,0,70]] : [[-19,-19,32],[19,-19,32],[-19,19,32],[19,19,32]].filter(() => Math.random() < 0.85);
+    lots.forEach(([ox,oz,s]) => {
+      const w = s*rnd(0.72,1), d = s*rnd(0.72,1);
+      let h = dist < 380 ? rnd(28, 115) : dist < 700 ? rnd(18, 70) : rnd(10, 40);
+      if (clear) h = Math.min(h, rnd(10, 24));
+      if (s===70) h *= 0.9;
+      const k = h > 80 ? 1 : Math.random() < 0.4 ? 2 : Math.random() < 0.5 ? 0 : 3;
+      const p = boxParts(w, h, d, bx+ox, h/2, bz+oz); parts[k].push(p); roofs.push(p);
+      if (Math.random() < 0.6){ const hw = rnd(4,9), hd = rnd(4,9), hh = rnd(2,4); const q = boxParts(hw, hh, hd, bx+ox+rnd(-w/4,w/4), h+hh/2, bz+oz+rnd(-d/4,d/4)); roofs.push(q); parts[0].push(q); }
+      if (h > 85) beacons.push([bx+ox, h+1.5, bz+oz]);
+    });
+  }
+  parts.forEach((list, i) => { if (!list.length) return; const m = new THREE.Mesh(merge(list, 'side'), mats[i]); m.castShadow = m.receiveShadow = true; S.add(m); });
+  const rm = new THREE.Mesh(merge(roofs, 'top'), roofMat); rm.receiveShadow = true; S.add(rm);
+  // aviation obstruction lights
+  O.beaconMat = glowMat(0xFF3020, 1);
+  beacons.forEach(p => { const b = glow(O.beaconMat, 7); b.position.set(...p); S.add(b); });
+  // street lights
+  const slMat = glowMat(0xFFC07A, 0.6);
+  for (let x=-650; x<=650; x+=50) [-50, 50, -250].forEach(z => { if (Math.abs(x) < 130 && Math.abs(z) < 110) return; const s = glow(slMat, 4); s.position.set(x, 8, z + 8); S.add(s); });
+  for (let z=-650; z<=650; z+=50) [50, -150, 250].forEach(x => { if (Math.abs(z-210) < 70) return; if (Math.abs(x) < 130 && Math.abs(z) < 110) return; const s = glow(slMat, 4); s.position.set(x + 8, 8, z); S.add(s); });
+  // trees along the river banks and plaza
+  const treeN = 520; const crown = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), std(0x2E4A2A, 0.9), treeN); const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.35, 0.45, 1, 6), std(0x4A3A2C, 0.9), treeN);
+  crown.castShadow = true; const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), Sc = new THREE.Vector3();
+  for (let i=0;i<treeN;i++){
+    let x, z; if (i < 420){ x = rnd(-1100, 1100); z = i%2 ? rnd(132,148) : rnd(272,288); } else { const a = rnd(0, Math.PI*2); x = Math.cos(a)*rnd(95,120); z = Math.sin(a)*rnd(80,100); }
+    const s = rnd(3.2, 5.5); M.compose(V.set(x, 3 + s*0.8, z), Q, Sc.set(s, s*1.15, s)); crown.setMatrixAt(i, M);
+    M.compose(V.set(x, 1.6, z), Q, Sc.set(1, 3.2, 1)); trunk.setMatrixAt(i, M);
+  }
+  S.add(crown); S.add(trunk);
+
+  // ===== our vertiport tower =====
+  const tower = new THREE.Mesh(new THREE.BoxGeometry(140, ROOF, 110), facade('tower')); tower.position.set(0, ROOF/2, 0); tower.castShadow = tower.receiveShadow = true;
+  { const uv = tower.geometry.attributes.uv; for (let f=0; f<6; f++){ const su = f<2 ? 110/32 : 140/32, sv = ROOF/57.6; for (let i=0;i<4;i++){ const k=f*4+i; uv.setXY(k, uv.getX(k)*su, uv.getY(k)*sv); } } }
+  S.add(tower);
+  const deck = new THREE.Mesh(new THREE.PlaneGeometry(140, 110), std(0xFFFFFF, 0.85, 0, { map:deckTexture() })); deck.rotation.x = -Math.PI/2; deck.position.set(0, ROOF+0.05, 0); deck.receiveShadow = true; S.add(deck);
+  const glassP = std(0x9FC4DA, 0.05, 0.2, { transparent:true, opacity:0.28 });
+  [[0,-55.2,140,0.3],[0,55.2,140,0.3],[-70.2,0,0.3,110],[70.2,0,0.3,110]].forEach(([x,z,w,d]) => { const p = new THREE.Mesh(new THREE.BoxGeometry(w, 1.4, d), glassP); p.position.set(x, ROOF+0.7, z); S.add(p); const cap = new THREE.Mesh(new THREE.BoxGeometry(Math.max(w,0.5), 0.15, Math.max(d,0.5)), std(0x9AA0A6, 0.4, 0.8)); cap.position.set(x, ROOF+1.45, z); S.add(cap); });
+  // terminal pavilion
+  const pav = new THREE.Mesh(new THREE.BoxGeometry(28, 6, 9), std(0x86AECB, 0.06, 0.3, { transparent:true, opacity:0.45 })); pav.position.set(32, ROOF+3, -47); S.add(pav);
+  const pavRoof = new THREE.Mesh(new THREE.BoxGeometry(30, 0.6, 11), std(0xC9CCCF, 0.5, 0.4)); pavRoof.position.set(32, ROOF+6.3, -47); pavRoof.castShadow = true; S.add(pavRoof);
+  const pavLight = glow(glowMat(0xFFE2B0, 0.35), 12); pavLight.position.set(32, ROOF+3, -47); S.add(pavLight);
+  // FATO edge lights (colour = FATO state) and TLOF lights
+  O.fatoLight = glowMat(0x3CFF9A, 0.9); const bulb = new THREE.MeshBasicMaterial({ color:0xE8FFF2 });
+  for (let i=0;i<20;i++){ const side = Math.floor(i/5), t = (i%5)/5; let x, z; if (side===0){ x=-45+50*t; z=-25; } else if (side===1){ x=5; z=-25+50*t; } else if (side===2){ x=5-50*t; z=25; } else { x=-45; z=25-50*t; }
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.35,0.35,0.4,8), bulb); b.position.set(x, ROOF+0.25, z); S.add(b); const gl = glow(O.fatoLight, 2.2); gl.position.set(x, ROOF+0.5, z); S.add(gl); }
+  const tlofMat = glowMat(0xFFD66A, 0.9); for (let i=0;i<12;i++){ const a = i/12*Math.PI*2; const gl = glow(tlofMat, 1.6); gl.position.set(-20+Math.cos(a)*15, ROOF+0.4, Math.sin(a)*15); S.add(gl); }
+  O.fatoTint = new THREE.MeshBasicMaterial({ color:0x2F8F6A, transparent:true, opacity:0.0, depthWrite:false });
+  const tint = new THREE.Mesh(new THREE.PlaneGeometry(50, 50), O.fatoTint); tint.rotation.x = -Math.PI/2; tint.position.set(-20, ROOF+0.12, 0); S.add(tint);
+  // stands: tint overlay, charger with screen
+  O.stands = {};
+  Object.entries(W.STAND).forEach(([s,p]) => {
+    const m = new THREE.MeshBasicMaterial({ color:0x4CC38A, transparent:true, opacity:0.12, depthWrite:false });
+    const pl = new THREE.Mesh(new THREE.PlaneGeometry(26, 20), m); pl.rotation.x = -Math.PI/2; pl.position.set(p[0]+2, ROOF+0.1, p[2]); S.add(pl);
+    const ch = new THREE.Mesh(new THREE.BoxGeometry(2.4, 5, 3.6), std(0xD7DADD, 0.35, 0.5)); ch.position.set(p[0]+17, ROOF+2.5, p[2]); ch.castShadow = true; S.add(ch);
+    const scr = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.6), new THREE.MeshBasicMaterial({ color:0x4FA3FF })); scr.rotation.y = -Math.PI/2; scr.position.set(p[0]+15.75, ROOF+3.4, p[2]); S.add(scr);
+    const off = textSprite('정비 중', '#C9D2DC', 6); off.position.set(p[0], ROOF+8, p[2]); off.visible = false; S.add(off);
+    O.stands[s] = { mat:m, off, screen:scr };
+  });
+  // windsock
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.18, 7, 8), std(0xC8CCD0, 0.4, 0.8)); pole.position.set(62, ROOF+3.5, 48); S.add(pole);
+  const sockTex = ctex(64, 256, (g,w,h) => { for (let i=0;i<5;i++){ g.fillStyle = i%2 ? '#F4F4F0' : '#F06A1E'; g.fillRect(0, i*h/5, w, h/5); } });
+  const sock = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.35, 5, 14, 1, true), std(0xFFFFFF, 0.8, 0, { map:sockTex, side:THREE.DoubleSide }));
+  sock.geometry.rotateZ(Math.PI/2); sock.geometry.translate(2.5, 0, 0); const sockPivot = new THREE.Group(); sockPivot.position.set(62, ROOF+6.8, 48); sockPivot.add(sock); S.add(sockPivot); O.sock = sockPivot;
+  // labels
+  const ours = textSprite('도심 버티포트 (관할)', '#F2A93B', 16, 0.034); ours.position.set(20, ROOF+45, -70); hudAdd(ours);
+  const fl = textSprite('FATO 1', '#E9EEF3', 7); fl.position.set(-20, ROOF+4, -31); hudAdd(fl);
+  // holds, final, sector (HUD)
+  Object.entries(W.HOLD).forEach(([k,c]) => { hudAdd(loop(c, W.HR, c[1], 0x9CC4EA)); const t = textSprite(k+' 대기', '#BFD8F0', 9, 0.024); t.position.set(c[0], c[1]+18, c[2]); hudAdd(t); });
+  O.final = hudAdd(dashed([[-300,135,0], W.FINAL, [-60,60,0], W.FATO], 0x4CC38A, 8, 6, 0.9));
+  const sx = W.SECTOR; O.sectorMat = new THREE.MeshBasicMaterial({ color:0x4CC38A, transparent:true, opacity:0.05, side:THREE.DoubleSide, depthWrite:false, fog:false });
+  const sec = new THREE.Mesh(new THREE.BoxGeometry(sx.x1-sx.x0, 70, sx.z1-sx.z0), O.sectorMat); sec.position.set((sx.x0+sx.x1)/2, 110, (sx.z0+sx.z1)/2); O.sector = hudAdd(sec);
+  O.sectorEdge = new THREE.LineSegments(new THREE.EdgesGeometry(sec.geometry), new THREE.LineBasicMaterial({ color:0x4CC38A, transparent:true, opacity:0.5, fog:false })); O.sectorEdge.position.copy(sec.position); hudAdd(O.sectorEdge);
+  // other vertiports
+  const padMat = std(0x3F4346, 0.8); const portLight = glowMat(0x7FC4FF, 1);
+  PORTS.forEach(p => {
+    const h = 34; const b = new THREE.Mesh(new THREE.BoxGeometry(70, h, 70), mats[1]); b.position.set(p.pos[0], h/2, p.pos[2]); b.castShadow = true; S.add(b);
+    { const uv = b.geometry.attributes.uv; for (let f=0; f<6; f++){ for (let i=0;i<4;i++){ const k=f*4+i; uv.setXY(k, uv.getX(k)*70/32, uv.getY(k)*h/57.6); } } }
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(18, 18, 0.6, 40), padMat); pad.position.set(p.pos[0], h+0.3, p.pos[2]); S.add(pad);
+    for (let i=0;i<14;i++){ const a = i/14*Math.PI*2; const gl = glow(portLight, 3); gl.position.set(p.pos[0]+Math.cos(a)*17, h+1, p.pos[2]+Math.sin(a)*17); S.add(gl); }
+    const t = textSprite(p.name + ' 버티포트', '#BFD8F0', 34, 0.03); t.position.set(p.pos[0], 95, p.pos[2]); hudAdd(t);
+    hudAdd(dashed([[p.pos[0], CRUISE, p.pos[2]], W.ENTRY[p.side], holdStart(p.side)], 0x5AA6EE, 14, 10, 0.35));
+  });
+  O.transitLine = hudAdd(dashed(TRANSIT_ROUTE, 0xD0D6DC, 16, 10, 0.5));
+  hudAdd(dashed(VISUAL_ROUTE, 0x8E9AA8, 16, 10, 0.3));
+  O.transitLabel = textSprite('김포–잠실 회랑 (통과)', '#D0D6DC', 22, 0.026); O.transitLabel.position.set(-330, CRUISE, -90); hudAdd(O.transitLabel);
+  // hazards
+  O.fod = new THREE.Group(); [[-28,-8],[-12,10],[-22,14],[-8,-12],[-30,6]].forEach(([x,z]) => { const f = new THREE.Mesh(new THREE.BoxGeometry(1.4,0.08,1.0), std(0xE8E2D2, 0.6, 0, { side:THREE.DoubleSide })); f.position.set(x, ROOF+0.25, z); f.rotation.y = Math.random()*3; O.fod.add(f); }); O.fod.visible = false; S.add(O.fod);
+  O.fire = new THREE.Group();
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(4, 13, 14, 1, true), new THREE.MeshBasicMaterial({ color:0xFF7A2E, transparent:true, opacity:0.85, blending:THREE.AdditiveBlending, depthWrite:false })); flame.position.y = 6.5; O.fire.add(flame); O.flame = flame;
+  const fg = glow(glowMat(0xFF8A3A, 1), 34); fg.position.y = 7; O.fire.add(fg); O.fireGlow = fg;
+  O.smoke = []; for (let i=0;i<6;i++){ const sm = new THREE.Mesh(new THREE.SphereGeometry(5, 12, 10), std(0x3A3E44, 1, 0, { transparent:true, opacity:0.5, depthWrite:false })); O.fire.add(sm); O.smoke.push(sm); }
+  O.fireLight = new THREE.PointLight(0xFF7A3D, 3, 140, 2); O.fireLight.position.y = 10; O.fire.add(O.fireLight);
+  O.fire.visible = false; S.add(O.fire);
+  O.gust = new THREE.Group(); const gm = new THREE.MeshBasicMaterial({ color:0xE6F0FA, transparent:true, opacity:0.22, depthWrite:false }); for (let i=0;i<22;i++){ const g = new THREE.Mesh(new THREE.BoxGeometry(40, 0.25, 0.25), gm); g.position.set(rnd(-220,120), rnd(ROOF+6, 130), rnd(-90,90)); O.gust.add(g); } O.gust.visible = false; S.add(O.gust);
+  O.drone = makeCraft('rogue'); const dr = new THREE.Mesh(new THREE.RingGeometry(14, 15.5, 40), new THREE.MeshBasicMaterial({ color:0xEF6A55, side:THREE.DoubleSide, transparent:true, opacity:0.75, fog:false })); dr.rotation.x = -Math.PI/2; O.drone.add(dr); O.droneRing = dr; O.drone.visible = false; S.add(O.drone);
+  // rescue vehicle at ground
+  O.truck = new THREE.Group(); const tb = new THREE.Mesh(new THREE.BoxGeometry(10, 3.4, 3.2), std(0xB8231B, 0.4, 0.3)); tb.position.y = 2.2; tb.castShadow = true; O.truck.add(tb);
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(3, 2.6, 3.1), std(0xD8DCE0, 0.2, 0.4)); cab.position.set(-6, 1.8, 0); O.truck.add(cab);
+  O.truckLights = [glow(glowMat(0xFF2A2A, 1), 6), glow(glowMat(0x3A7BFF, 1), 6)]; O.truckLights[0].position.set(-6, 3.6, -0.8); O.truckLights[1].position.set(-6, 3.6, 0.8); O.truckLights.forEach(l => O.truck.add(l));
+  O.truck.position.set(-40, 0, 72); O.truck.visible = false; S.add(O.truck);
+}
+
+/* ---------- drone models (meters) ---------- */
+let CG = null;
+function craftKit(){
+  if (CG) return CG;
+  const discTex = ctex(128, 128, (g,w,h) => { const r = g.createRadialGradient(64,64,6,64,64,64); r.addColorStop(0,'rgba(40,44,50,.0)'); r.addColorStop(0.55,'rgba(210,220,230,.20)'); r.addColorStop(0.9,'rgba(230,236,242,.30)'); r.addColorStop(1,'rgba(230,236,242,0)'); g.fillStyle = r; g.fillRect(0,0,w,h); });
+  CG = {
+    body: new THREE.SphereGeometry(1.6, 28, 18), canopy: new THREE.SphereGeometry(1.3, 24, 14, 0, Math.PI*2, 0, Math.PI/2),
+    ring: new THREE.TorusGeometry(4.8, 0.11, 8, 64), arm: new THREE.BoxGeometry(4.6, 0.16, 0.26), motor: new THREE.CylinderGeometry(0.34, 0.38, 0.6, 12),
+    blade: new THREE.BoxGeometry(2.9, 0.04, 0.2), disc: new THREE.CircleGeometry(1.5, 28), skid: new THREE.CylinderGeometry(0.07, 0.07, 3.6, 8), strut: new THREE.CylinderGeometry(0.06, 0.06, 1.3, 6),
+    status: new THREE.TorusGeometry(1.75, 0.09, 8, 40), bulb: new THREE.SphereGeometry(0.16, 8, 6), pod: new THREE.BoxGeometry(2.4, 1.4, 2.0),
+    white: std(0xEEF0F2, 0.32, 0.25), grey: std(0x9AA2AB, 0.45, 0.35), dark: std(0x23282E, 0.5, 0.4), metal: std(0x6E757D, 0.35, 0.85), black: std(0x15181C, 0.6, 0.2),
+    glass: std(0x0E1A24, 0.05, 0.9, { envMapIntensity:1.6 }), blades: std(0x1A1D21, 0.5, 0.3),
+    discM: new THREE.MeshBasicMaterial({ map:discTex, transparent:true, depthWrite:false, side:THREE.DoubleSide }),
+    red: glowMat(0xFF3A2A, 1), green: glowMat(0x3AFF7A, 1), white_g: glowMat(0xFFFFFF, 1),
+    redB: new THREE.MeshBasicMaterial({ color:0xFF3A2A }), greenB: new THREE.MeshBasicMaterial({ color:0x3AFF7A }), whiteB: new THREE.MeshBasicMaterial({ color:0xFFFFFF })
+  };
+  return CG;
+}
+function makeCraft(kind){
+  const K = craftKit(), g = new THREE.Group();
+  const body = kind==='transit' ? K.grey : kind==='rogue' ? K.black : K.white;
+  const add = (geo, m, x, y, z, rx, ry, rz, shadow) => { const o = new THREE.Mesh(geo, m); o.position.set(x||0, y||0, z||0); if (rx) o.rotation.x = rx; if (ry) o.rotation.y = ry; if (rz) o.rotation.z = rz; if (shadow) o.castShadow = true; g.add(o); return o; };
+  const rotors = [];
+  if (kind==='pax' || kind==='transit'){
+    const f = add(K.body, body, 0, 0, 0, 0, 0, 0, true); f.scale.set(1.0, 0.82, 1.5);
+    if (kind==='pax'){ const c = add(K.canopy, K.glass, 0, 0.35, -0.95); c.scale.set(0.92, 0.85, 1.05); }
+    else { add(K.pod, K.dark, 0, -1.3, 0, 0, 0, 0, true); }
+    add(K.ring, K.metal, 0, 0.25, 0, Math.PI/2, 0, 0, true);
+    const n = kind==='pax' ? 8 : 6, rr = 4.8;
+    for (let i=0;i<n;i++){
+      const a = i/n*Math.PI*2, x = Math.cos(a)*rr, z = Math.sin(a)*rr;
+      add(K.arm, K.dark, Math.cos(a)*2.3, 0.25, Math.sin(a)*2.3, 0, -a, 0);
+      add(K.motor, K.metal, x, 0.55, z);
+      const b = add(K.blade, K.blades, x, 0.9, z); b.rotation.y = Math.random()*3; rotors.push(b);
+      add(K.disc, K.discM, x, 0.92, z, -Math.PI/2);
+    }
+    [-1.05, 1.05].forEach(x => { add(K.skid, K.metal, x, -1.85, 0, Math.PI/2); add(K.strut, K.metal, x*0.8, -1.25, -0.9, 0, 0, x>0?-0.35:0.35); add(K.strut, K.metal, x*0.8, -1.25, 0.9, 0, 0, x>0?-0.35:0.35); });
+    const red = add(K.bulb, K.redB, -rr, 0.3, 0), grn = add(K.bulb, K.greenB, rr, 0.3, 0); red; grn;
+    const rg = glow(K.red, 1.6); rg.position.set(-rr, 0.3, 0); g.add(rg); const gg = glow(K.green, 1.6); gg.position.set(rr, 0.3, 0); g.add(gg);
+  } else { // rogue small quad
+    add(new THREE.BoxGeometry(1.6, 0.6, 1.6), body, 0, 0, 0, 0, 0, 0, true);
+    for (let i=0;i<4;i++){ const a = Math.PI/4 + i*Math.PI/2, x = Math.cos(a)*2.4, z = Math.sin(a)*2.4; add(K.arm, K.dark, Math.cos(a)*1.2, 0, Math.sin(a)*1.2, 0, -a, 0); const b = add(K.blade, K.blades, x, 0.35, z); b.scale.set(0.6,1,1); rotors.push(b); add(K.disc, K.discM, x, 0.37, z, -Math.PI/2).scale.setScalar(0.6); }
+    const rg = glow(K.red, 3); rg.position.set(0, 0.6, 0); g.add(rg);
+  }
+  const strobe = glow(K.white_g, 3.5); strobe.position.set(0, kind==='rogue' ? 0.8 : 1.45, 0); g.add(strobe);
+  let status = null;
+  if (kind!=='rogue'){ status = std(0xF2A93B, 0.3, 0, { emissive:0xF2A93B, emissiveIntensity:1.4 }); add(K.status, status, 0, -1.05, 0, Math.PI/2); }
+  g.userData = { rotors, strobe, status };
+  const s = kind==='rogue' ? 2.0 : kind==='transit' ? 1.35 : 1.55; g.scale.set(s, s, s);
+  return g;
+}
+
+/* camera */
+const CAMS = { wide:{ pos:[-160, 760, 880], tgt:[-40, 0, 0] }, near:{ pos:[-330, 200, 150], tgt:[-50, 55, 0] }, tower:{ pos:[72, ROOF+20, 78], tgt:[-35, ROOF+8, -8] } };
+function setCam(mode, instant){
+  if (!R) return;
+  R.camMode = mode;
+  document.querySelectorAll('[data-cam]').forEach(b => b.setAttribute('aria-pressed', b.dataset.cam===mode));
+  if (mode==='follow') return;
+  const c = CAMS[mode];
+  const to = { pos:new THREE.Vector3(...c.pos), tgt:new THREE.Vector3(...c.tgt) };
+  if (instant){ R.camera.position.copy(to.pos); R.controls.target.copy(to.tgt); R.controls.update(); R.camAnim = null; return; }
+  R.camAnim = { from:{ pos:R.camera.position.clone(), tgt:R.controls.target.clone() }, to, t:0 };
+}
+$('#hudbtn').onclick = () => { if (!R) return; R.hud = !R.hud; $('#hudbtn').setAttribute('aria-pressed', R.hud); (R.hudObjs||[]).forEach(o => o.visible = R.hud); };
+document.querySelectorAll('[data-cam]').forEach(b => b.onclick = () => { if (b.dataset.cam==='follow' && !(G && G.sel)) { log('추적할 기체를 먼저 선택하세요.', 'sys'); return; } setCam(b.dataset.cam); });
+
+/* =========================================================
+   GAME STATE
+   ========================================================= */
+const AIR = ['inbound','holding','approach','goaround','divert'];
+const LESSON = {
+  occ_land: ['FATO 점유 중 착륙 허가', 'FATO가 점유 · 예약된 동안에는 착륙 허가를 내지 않습니다.'],
+  occ_taxi: ['FATO 점유 중 지상이동', '출발기는 FATO가 비어 있을 때만 올립니다.'],
+  dep_vs_arr: ['접근기가 있는데 이륙 허가', '최종접근 중인 기체가 있으면 이륙시키지 않습니다.'],
+  hazard: ['위험 상황 중 이착륙 허가', '돌풍 · 드론 · 이물질 · 폐쇄 중에는 이착륙하지 않습니다.'],
+  hazard_touch: ['위험 상황 중 착륙 진행', '상황이 터지면 최종접근 중인 기체를 즉시 복행 · 대기시킵니다.'],
+  emg_first: ['비상기보다 다른 기체 먼저', '비상기가 있으면 다른 기체를 먼저 내리거나 띄우지 않습니다.'],
+  sys_dep: ['시스템 장애 중 신규 출발', '시스템 장애 중에는 출발을 보류하고 공중 기체부터 처리합니다.'],
+  battery: ['대기 지연으로 배터리 비상', '배터리가 낮은 기체부터 내리고, 못 내리면 일찍 전환합니다.'],
+  forced: ['배터리 소진 · 강제 착륙', '배터리 비상 기체는 즉시 착륙시키거나 여유 있을 때 전환해야 합니다.'],
+  nordo: ['두절 기체 접근 중 FATO 미확보', '두절 기체는 절차대로 들어옵니다. FATO와 접근 경로를 비워 둡니다.'],
+  no_stand: ['갈 스탠드 없이 착륙 허가', '착륙 허가 전에 들어갈 스탠드를 먼저 확보합니다.'],
+  sector: ['통과 교통이 접근 구역에 있는데 허가', '통과 기체가 최종접근 구역을 지날 때는 착륙 · 이륙 허가를 보류합니다.'],
+  sector_loss: ['통과 교통과 접근기 간격 상실', '구역이 노란색으로 바뀌면 최종접근 중인 기체를 복행 · 대기시킵니다.'],
+  divert: ['불필요한 대체 버티포트 전환', '정상 상황의 전환은 승객 불편과 비용으로 이어집니다.']
+};
+const EVENTS = {
+  gust: { title:'돌풍 기준 초과', sev:'warn', desc:'옥상 풍속계 돌풍 28kt (예시 기준 25kt). 약 18초간 이어집니다.',
+    opts:[['신규 출발 중지, 접근기 복행 · 대기, 바람 정보 제공',2],['출발만 중지한다',1],['접근 중인 기체를 서둘러 착륙시킨다',0]],
+    why:'기준을 넘으면 출발을 멈추고 접근기는 복행 · 대기시킵니다.', start(){ G.flags.gust = 18; }, apply(){ goAroundAll(); } },
+  fod: { title:'FATO 이물질 발견', sev:'warn', desc:'CCTV에 FATO 위 비닐 조각이 보입니다.',
+    opts:[['FATO 사용 중지, 접근기 대기, 점검 · 제거',2],['작업자를 불러 치우고 착륙은 계속',1],['다음 착륙 후에 치운다',0]],
+    why:'로터 하강풍이 이물질을 날립니다. 닫고 점검한 뒤 엽니다.', start(){ G.flags.fod = true; G.flags.fodAuto = 25; }, apply(){ goAroundAll(); G.flags.inspect = 8; log('FATO 점검 시작 (8초)', 'sys'); } },
+  mayday: { title:'MAYDAY · 배터리 셀 과열', sev:'bad', desc:'',
+    opts:[['비상 접수, 최우선 착륙 · 다른 기체 대기 · 소방 대기',2],['상황을 자세히 보고하라고 요청',0],['도착 순서대로 처리',0]],
+    why:'비상기는 접수 즉시 최우선 착륙. 다른 기체는 대기, 소방은 대기합니다.',
+    start(){ let a = G.ac.find(x => (x.st==='holding'||x.st==='inbound') && !x.nordo && !x.emg); if (!a) a = spawnArrival(null);
+      a.emg = true; a.bat = Math.min(a.bat, 32); this.desc = `${a.cs}가 비상을 선언했습니다. 배터리 ${Math.round(a.bat)}%, 탑승 3명.`; log(`${a.cs}: MAYDAY, 배터리 셀 과열, 즉시 착륙 요청`, 'bad'); },
+    apply(){ goAroundAll(x => !x.emg); G.flags.rescue = true; } },
+  drone: { title:'미확인 드론 탐지', sev:'bad', desc:'최종접근 경로 근처, 고도 약 90m. 약 16초간 머뭅니다.',
+    opts:[['접근 · 출발 중지, 접근기 대기, 경찰 신고 · 위치 기록',2],['재밍 장비로 무력화한다',0],['드론이 작으니 운영 계속',0]],
+    why:'관제사의 몫은 운항 중지, 신고, 기록입니다. 무력화는 권한 기관만 합니다.', start(){ G.flags.drone = 16; }, apply(){ goAroundAll(); } },
+  nordo: { title:'통신 두절', sev:'warn', desc:'',
+    opts:[['예비 수단으로 호출, FATO · 접근 경로 비워 둠',2],['즉시 비상 선포 · 소방 출동',1],['빈틈에 출발기를 먼저 내보낸다',0]],
+    why:'두절 기체는 사전 절차대로 약 15초 뒤 스스로 접근합니다. FATO와 접근 경로를 비워 두세요.',
+    start(){ let a = G.ac.find(x => x.st==='holding' && !x.emg && !x.nordo) || G.ac.find(x => x.st==='inbound' && !x.emg); if (!a) a = spawnArrival(null);
+      a.nordo = true; a.nordoT = 15; this.desc = `${a.cs}와 음성 · 데이터링크가 끊겼습니다. 사전 절차대로 대기 후 착륙합니다.`; log(`${a.cs}: 응답 없음 · 링크 끊김`, 'sys'); },
+    apply(){} },
+  fire: { title:'스탠드 배터리 화재', sev:'bad', desc:'',
+    opts:[['충전 전원 차단 · 소방 신고 · 대피, FATO 폐쇄',2],['소화기로 직접 진화하게 한다',1],['불난 기체를 FATO로 옮긴다',0]],
+    why:'에너지원 차단, 신고, 대피가 먼저입니다. 소방 작업 중 FATO는 닫습니다(20초).',
+    start(){ const cand = G.m.stands.filter(s => !G.fire[s]); const busy = cand.filter(s => G.stands[s] && byId(G.stands[s])?.st==='turn');
+      const pool = busy.length ? busy : cand; const s = pool[Math.floor(Math.random()*pool.length)] || 'C';
+      G.fire[s] = true; G.flags.closed = Math.max(G.flags.closed, 20); this.desc = `스탠드 ${s} 충전 중 연기 · 열폭주. 스탠드 ${s}는 남은 시간 동안 쓸 수 없습니다.`; log(`충전기 ${s} 과열 경보 · 연기 확인`, 'bad'); },
+    apply(){ goAroundAll(); } },
+  sys: { title:'관리시스템 장애', sev:'warn', desc:'배터리 · 대기시간 정보가 약 25초간 보이지 않습니다.',
+    opts:[['수동 절차 전환, 신규 출발 보류, 공중 기체 우선',2],['복구될 때까지 모든 기체 대기',1],['평소처럼 운영한다',0]],
+    why:'운영 능력이 줄었으니 일을 줄입니다. 출발은 보류하고 공중 기체부터 처리합니다.', start(){ G.flags.sys = 25; }, apply(){} }
+};
+
+let G = null, seq = 0;
+const byId = id => G.ac.find(a => a.id===id);
+function holdStart(side){ const c = W.HOLD[side]; return [c[0]+W.HR, c[1], c[2]]; }
+function newState(m){
+  G = { m, t:0, len:m.min*60, running:false, paused:false, score:0, ac:[], tr:[], stands:{A:null,B:null,C:null}, fire:{},
+    flags:{ gust:0, drone:0, fod:false, fodAuto:0, inspect:0, closed:0, sys:0, rescue:false },
+    card:null, logs:[], sel:null, used:new Set(), stats:{ land:0, dep:0, park:0, viol:0, forced:0, emg:0, evOk:0, evTot:0, div:0 },
+    incidents:[], schedule:[], nextSpawn: m.spawn ? 12 : 1e9, nextTransit: 8, nextVisual: 4, ended:false, assist:m.assist, goalsMetAt:null,
+    sectorBusy:false, sectorWarn:false };
+  const evs = m.events==='random' ? ['gust','fod','mayday','drone','nordo','fire','sys'].sort(() => Math.random()-.5).slice(0,6).map((k,i) => ({ k, t:[30,72,112,155,200,245][i] + rnd(-3,3) })) : m.events.map(e => ({ k:e.k, t:e.t }));
+  G.schedule = evs.map(e => ({ ...e, done:false }));
+  (m.script||[]).forEach(s => G.schedule.push({ spawn:s.o, t:s.t, done:false }));
+}
+function mkAc(kind, prefix){
+  let cs; do { cs = (prefix||'DR') + Math.floor(rnd(101, 899)); } while (G.used.has(cs)); G.used.add(cs);
+  return { id:++seq, cs, kind, st:'', pos:[0,0,0], bat:60, emg:false, nordo:false, nordoT:0, hold:'N1', ang:0, tw:null, req:null, reqT:0, wait:0, stand:null, turn:0, turnMax:1, from:'', to:'', mesh:null, label:null, lsig:'', heading:0 };
+}
+function addMesh(a){ a.mesh = makeCraft('pax'); a.mesh.position.set(...a.pos); R.scene.add(a.mesh); }
+function removeAc(a){ if (a.mesh) R.scene.remove(a.mesh); if (a.label) a.label.remove(); G.ac = G.ac.filter(b => b!==a); if (G.sel===a.id) G.sel = null; }
+
+/* tween in 3D */
+function tween(a, pts, dur, done){
+  const lens = []; let tot = 0;
+  for (let i=1;i<pts.length;i++){ const l = Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1], pts[i][2]-pts[i-1][2]); lens.push(l); tot += l; }
+  a.tw = { pts, lens, tot: tot||1, dur, t:0, done };
+}
+function stepTween(a, dt){
+  const w = a.tw; w.t += dt; const f = Math.min(1, w.t/w.dur); let d = f*w.tot;
+  for (let i=0;i<w.lens.length;i++){
+    if (d <= w.lens[i] || i===w.lens.length-1){ const r = w.lens[i] ? Math.min(1, d/w.lens[i]) : 1; const p0 = w.pts[i], p1 = w.pts[i+1];
+      const nx = p0[0]+(p1[0]-p0[0])*r, nz = p0[2]+(p1[2]-p0[2])*r; if (Math.hypot(nx-a.pos[0], nz-a.pos[2]) > 0.05) a.heading = Math.atan2(nx-a.pos[0], nz-a.pos[2]);
+      a.pos = [nx, p0[1]+(p1[1]-p0[1])*r, nz]; break; }
+    d -= w.lens[i];
+  }
+  if (f >= 1){ const cb = w.done; a.tw = null; cb && cb(); }
+}
+const pathLen = pts => { let s = 0; for (let i=1;i<pts.length;i++) s += Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1], pts[i][2]-pts[i-1][2]); return s; };
+
+/* scoring & logging */
+function log(text, cls){ if (!G) return; G.logs.push({ t:fmt(G.len - G.t), text, cls:cls||'' }); if (G.logs.length > 80) G.logs.shift(); G.logDirty = true; }
+function addScore(n){ G.score += n; }
+function violation(key, a, pts){
+  const [title, lesson] = LESSON[key];
+  G.stats.viol++; addScore(-pts);
+  G.incidents.push({ t:fmt(G.len - G.t), title:(a ? a.cs+' · ' : '') + title, lesson, pts:-pts });
+  log(`위반: ${title}${a ? ' ('+a.cs+')' : ''} −${pts}`, 'bad');
+  flashToast('위반', title, true);
+}
+let toastTimer = null;
+function flashToast(head, body, bad){
+  const t = $('#toast'); t.innerHTML = `<h2 style="color:${bad?'var(--red)':'var(--amber)'}">${esc(head)}</h2><p>${esc(body)}</p>`; t.style.borderColor = bad ? 'var(--red)' : 'var(--amber)'; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 1600);
+}
+
+/* =========================================================
+   TRAFFIC
+   ========================================================= */
+function spawnArrival(originName){
+  const port = originName ? PORT(originName) : PORTS[Math.floor(Math.random()*PORTS.length)];
+  const a = mkAc('arr'); a.from = port.name; a.hold = port.side;
+  const b = G.m.spawn ? G.m.spawn.bat : [60,80]; a.bat = rnd(b[0], b[1]);
+  a.pos = [port.pos[0], CRUISE, port.pos[2]]; a.st = 'inbound';
+  const pts = [a.pos, W.ENTRY[port.side], holdStart(port.side)];
+  tween(a, pts, pathLen(pts)/60, () => enterHold(a));
+  addMesh(a); G.ac.push(a);
+  log(`${a.cs}: ${port.name} 출발, ${a.hold} 방향 진입 · 배터리 ${Math.round(a.bat)}%`);
+  return a;
+}
+function spawnTransit(crossing){
+  const route = crossing ? TRANSIT_ROUTE : VISUAL_ROUTE;
+  const t = mkAc('transit', crossing ? 'TX' : 'TQ'); t.crossing = crossing; t.pos = route[0].slice(); t.st = 'transit';
+  tween(t, route, pathLen(route)/(crossing ? 34 : 48), () => { R.scene.remove(t.mesh); t.label && t.label.remove(); G.tr = G.tr.filter(x => x!==t); });
+  t.mesh = makeCraft('transit'); t.mesh.position.set(...t.pos); R.scene.add(t.mesh); G.tr.push(t);
+}
+function enterHold(a){ a.st='holding'; a.ang=0; setReq(a,'land'); }
+function setReq(a, r){ a.req = r; a.reqT = G.t; }
+function clearReq(a){ if (a.req) a.wait += G.t - a.reqT; a.req = null; }
+function fatoReserved(except){ return G.ac.some(b => b!==except && (['approach','landed','taxi_out','lineup'].includes(b.st) || (b.st==='takeoff' && b.tw && b.tw.t < 1.8))); }
+function hazardNow(){ const f = G.flags; if (f.closed>0 || f.inspect>0) return 'FATO 폐쇄'; if (f.fod) return '이물질'; if (f.gust>0) return '돌풍'; if (f.drone>0) return '미확인 드론'; return null; }
+function emgWaiting(except){ return G.ac.some(b => b!==except && b.emg && ['inbound','holding','approach','goaround'].includes(b.st)); }
+function availStand(s){ return G.m.stands.includes(s) && !G.stands[s] && !G.fire[s]; }
+function freeStandCount(){ return ['A','B','C'].filter(availStand).length - G.ac.filter(b => b.st==='approach' || b.st==='landed').length; }
+function goAround(a, quiet){
+  a.st='goaround'; const hs = holdStart(a.hold);
+  tween(a, [a.pos, [a.pos[0]-50, Math.max(a.pos[1], 95)+15, a.pos[2] + (a.hold==='N1'?-50:50)], hs], 5, () => enterHold(a));
+  if (!quiet) log(`${a.cs}: 복행, ${a.hold} 대기`);
+}
+function goAroundAll(filter){ G.ac.filter(a => a.st==='approach' && !a.nordo && (!filter || filter(a))).forEach(a => goAround(a)); }
+function startApproach(a){ clearReq(a); a.st='approach'; tween(a, [a.pos, W.FINAL, [-70,58,0], W.FATO], 6.5, () => touchdown(a)); }
+function touchdown(a){
+  if (fatoReserved(a)){ violation(a.nordo ? 'nordo' : 'occ_land', a, a.nordo ? 200 : 150); goAround(a); return; }
+  if (G.flags.closed>0 || G.flags.inspect>0){ violation('hazard_touch', a, 100); goAround(a); return; }
+  if (hazardNow()) violation('hazard_touch', a, 100);
+  a.st='landed'; a.pos = W.FATO.slice();
+  const wasEmg = a.emg, wasNordo = a.nordo;
+  const pts = wasEmg ? 150 : Math.max(40, Math.round(100 - 2*Math.max(0, a.wait-12)));
+  G.stats.land++; if (wasEmg) G.stats.emg++;
+  addScore(pts); log(`${a.cs}: 착륙${wasEmg?' (비상기)':''}${wasNordo?' · 전화로 교신 복구':''} +${pts}`, 'good');
+  a.emg = false; a.nordo = false; a.wait = 0; setReq(a,'stand');
+}
+function finishTurn(a){ a.st='ready'; a.kind='dep'; a.bat=100; a.wait=0; a.to = PORTS[Math.floor(Math.random()*PORTS.length)].name; setReq(a,'taxi'); log(`${a.cs}: 스탠드 ${a.stand}, ${a.to}행 출발 준비 완료`); }
+
+/* checks: return null when OK, else [lessonKey, points, short reason] */
+function check(a, k){
+  if (a.nordo && ['land','hold','divert'].includes(k)) return ['nordo_cmd', 0, '응답 없음'];
+  if (k==='land'){
+    if (fatoReserved(a)) return ['occ_land',150,'FATO 점유'];
+    const hz = hazardNow(); if (hz) return ['hazard',100,hz];
+    if (G.sectorBusy) return ['sector',100,'통과 교통'];
+    if (!a.emg && emgWaiting(a)) return ['emg_first',100,'비상기 우선'];
+    if (!a.emg && freeStandCount() <= 0) return ['no_stand',80,'빈 스탠드 없음'];
+    if (G.sectorWarn) return ['warn_sector',0,'통과 교통 접근 중'];
+    return null;
+  }
+  if (k==='taxi'){
+    if (fatoReserved(a)) return ['occ_taxi',120,'FATO 점유'];
+    if (G.flags.closed>0 || G.flags.inspect>0 || G.flags.fod) return ['hazard',100,hazardNow()];
+    return null;
+  }
+  if (k==='takeoff'){
+    if (G.ac.some(b => b.st==='approach')) return ['dep_vs_arr',150,'접근기 있음'];
+    const hz = hazardNow(); if (hz) return ['hazard',100,hz];
+    if (G.sectorBusy) return ['sector',100,'통과 교통'];
+    if (emgWaiting(a)) return ['emg_first',100,'비상기 우선'];
+    if (G.flags.sys>0) return ['sys_dep',50,'시스템 장애'];
+    return null;
+  }
+  return null;
+}
+function doCmd(a, k){
+  if (!G.running || G.paused || !a) return;
+  if (a.nordo && ['land','hold','divert'].includes(k)){ log(`${a.cs}: (응답 없음)`, 'sys'); return; }
+  const c = check(a, k);
+  if (c && c[1] > 0){ violation(c[0], a, c[1]); refreshUI(true); return; }
+  if (k==='land' && a.st==='holding'){ log(`관제 → ${a.cs}: FATO 1 착륙 허가`, 'me'); startApproach(a); }
+  else if (k==='hold' && a.st==='approach'){ log(`관제 → ${a.cs}: 복행, ${a.hold} 대기`, 'me'); goAround(a, true); }
+  else if (k==='divert' && ['holding','approach','inbound'].includes(a.st)){
+    clearReq(a); const ok = a.emg || a.bat < 24 || G.flags.closed>0 || G.flags.inspect>0 || G.flags.gust>0 || G.flags.drone>0 || G.flags.fod; G.stats.div++;
+    if (ok){ addScore(10); log(`관제 → ${a.cs}: 대체 버티포트로 전환 (적절) +10`, 'me'); }
+    else { addScore(-30); G.incidents.push({ t:fmt(G.len-G.t), title:a.cs+' · '+LESSON.divert[0], lesson:LESSON.divert[1], pts:-30 }); log(`관제 → ${a.cs}: 대체 버티포트로 전환 (불필요) −30`, 'bad'); }
+    a.st='divert'; a.emg=false; a.req=null;
+    const dest = PORTS.find(p => p.name!==a.from) || PORTS[0];
+    const pts = [a.pos, [a.pos[0]-80, CRUISE, a.pos[2]], [dest.pos[0], CRUISE, dest.pos[2]]];
+    tween(a, pts, pathLen(pts)/70, () => removeAc(a));
+  }
+  else if (k.startsWith('stand') && a.st==='landed'){
+    const s = k.slice(5); if (!availStand(s)) return;
+    clearReq(a); a.st='taxi_in'; a.stand=s; G.stands[s]=a.id; const sp = W.STAND[s];
+    log(`관제 → ${a.cs}: 스탠드 ${s}로 이동`, 'me');
+    tween(a, [W.FATO, W.TAXI, [W.TAXI[0], ROOF+2, sp[2]], sp], 3.5, () => { a.st='turn'; a.turnMax = a.turn = rnd(12, 16); G.stats.park++; addScore(20); });
+  }
+  else if (k==='apron' && a.st==='landed'){
+    if (G.ac.some(b => b.st==='apron' || b.st==='deboard')) return;
+    clearReq(a); a.st='apron'; log(`관제 → ${a.cs}: 임시 주기장 이동, 승객 하기`, 'me');
+    tween(a, [W.FATO, [-20,ROOF+2,28], W.APRON], 3, () => { a.st='deboard'; a.turn = 8; G.stats.park++; });
+  }
+  else if (k==='taxi' && a.st==='ready'){
+    clearReq(a); a.st='taxi_out'; const sp = W.STAND[a.stand]; G.stands[a.stand] = null;
+    log(`관제 → ${a.cs}: 스탠드 ${a.stand}에서 FATO 1로 이동`, 'me');
+    tween(a, [sp, [W.TAXI[0], ROOF+2, sp[2]], W.TAXI, W.FATO], 3.5, () => { a.st='lineup'; setReq(a,'takeoff'); log(`${a.cs}: FATO 1, 이륙 준비 완료`); });
+  }
+  else if (k==='takeoff' && a.st==='lineup'){
+    clearReq(a); a.st='takeoff'; log(`관제 → ${a.cs}: FATO 1 이륙 허가`, 'me');
+    tween(a, [W.FATO, [-20, 80, 0], W.CLIMB], 3.6, () => {
+      const pts = Math.max(40, Math.round(100 - 2*Math.max(0, a.wait-12)));
+      G.stats.dep++; addScore(pts); log(`${a.cs}: 이륙 · 회랑 인계 (${a.to}행) +${pts}`, 'good');
+      a.st='enroute'; a.req=null; const dest = PORT(a.to); const route = [a.pos, [dest.pos[0]*0.4, CRUISE, dest.pos[2]*0.4], [dest.pos[0], CRUISE, dest.pos[2]]];
+      tween(a, route, pathLen(route)/65, () => removeAc(a));
+    });
+  }
+  refreshUI(true);
+}
+
+/* events */
+function triggerEvent(k){
+  const ev = EVENTS[k];
+  if (G.card && !G.card.answered) resolveCard(-1, true);
+  ev.start(); G.stats.evTot++;
+  const perm = ev.opts.map((_,i)=>i).sort(() => Math.random()-.5);
+  G.card = { ev, perm, deadline:G.t + 20, answered:false, pick:null, hideAt:0 };
+  log(`상황 발생: ${ev.title}`, ev.sev==='bad' ? 'bad' : 'sys');
+  flashToast('상황 발생', ev.title, ev.sev==='bad');
+  renderCard();
+}
+function resolveCard(i, timeout){
+  const c = G.card; if (!c || c.answered) return;
+  c.answered = true; c.pick = i; c.hideAt = G.t + 7;
+  const v = i>=0 ? c.ev.opts[i][1] : -1;
+  if (v===2){ G.stats.evOk++; addScore(60); c.ev.apply(); log(`조치: ${c.ev.opts[i][0]} +60`, 'good'); }
+  else if (v===1){ addScore(20); G.incidents.push({ t:fmt(G.len-G.t), title:c.ev.title+' · 부분 조치', lesson:c.ev.why, pts:20 }); log(`조치(부분): ${c.ev.opts[i][0]} +20`, 'sys'); }
+  else { const p = timeout ? 60 : 40; addScore(-p); G.incidents.push({ t:fmt(G.len-G.t), title:c.ev.title+' · '+(timeout?'20초 안에 조치하지 못함':'잘못된 조치'), lesson:c.ev.why, pts:-p }); log(`${timeout?'시간 초과':'잘못된 조치'}: ${c.ev.title} −${p}`, 'bad'); }
+  renderCard();
+}
+function renderCard(){
+  const box = $('#cardbox'), c = G && G.card;
+  if (!c){ box.innerHTML=''; return; }
+  const ev = c.ev;
+  let h = `<div class="card ${ev.sev==='bad'?'':'warn'}"><div class="t"><h2>${esc(ev.title)}</h2>${c.answered?'':'<span class="mono" style="color:var(--amber);font-weight:700" id="cleft">20초</span>'}</div><p class="d">${esc(ev.desc)}</p>`;
+  if (!c.answered) h += `<div class="cbar"><i id="cbar" style="width:100%"></i></div><p class="label">올바른 조치를 고르세요</p>`;
+  h += c.perm.map(i => { const [txt,v] = ev.opts[i]; let cls = 'opt'; if (c.answered){ if (v===2) cls += ' ok'; else if (i===c.pick) cls += ' ng'; } return `<button class="${cls}" data-i="${i}" ${c.answered?'disabled':''}>${esc(txt)}</button>`; }).join('');
+  if (c.answered) h += `<p class="why"><b>${c.pick>=0 && ev.opts[c.pick][1]===2 ? '정답' : '올바른 조치'}</b> · ${esc(ev.why)}</p>`;
+  box.innerHTML = h + '</div>';
+}
+$('#cardbox').addEventListener('click', e => { const b = e.target.closest('.opt'); if (b && G && G.card && !G.card.answered) resolveCard(+b.dataset.i, false); });
+
+/* =========================================================
+   UPDATE LOOP
+   ========================================================= */
+function update(dt){
+  G.t += dt;
+  const f = G.flags;
+  ['gust','drone','closed','sys'].forEach(k => { if (f[k] > 0){ f[k] -= dt; if (f[k] <= 0){ f[k] = 0; log({gust:'돌풍 경보 해제',drone:'드론 이탈 확인',closed:'FATO 폐쇄 해제',sys:'시스템 복구'}[k], 'sys'); } } });
+  if (f.inspect > 0){ f.inspect -= dt; if (f.inspect <= 0){ f.inspect = 0; f.fod = false; log('점검 완료, FATO 사용 재개', 'sys'); } }
+  if (f.fod && f.inspect <= 0){ f.fodAuto -= dt; if (f.fodAuto <= 0){ f.fod = false; log('지상요원이 이물질 제거 (늦은 조치)', 'sys'); } }
+
+  G.schedule.forEach(s => { if (!s.done && G.t >= s.t){ s.done = true; if (s.spawn) spawnArrival(s.spawn); else triggerEvent(s.k); } });
+  if (G.card){ if (!G.card.answered && G.t >= G.card.deadline) resolveCard(-1, true); else if (G.card.answered && G.t >= G.card.hideAt){ G.card = null; renderCard(); } }
+
+  if (G.m.spawn && G.t >= G.nextSpawn){
+    const air = G.ac.filter(a => ['inbound','holding','approach','goaround'].includes(a.st)).length;
+    if (air < G.m.spawn.max) spawnArrival(null);
+    G.nextSpawn = G.t + G.m.spawn.every + rnd(-2, 2);
+  }
+  if (G.m.transit && G.t >= G.nextTransit){ spawnTransit(true); G.nextTransit = G.t + rnd(24, 34); }
+  if (G.t >= G.nextVisual){ spawnTransit(false); G.nextVisual = G.t + rnd(16, 24); }
+
+  // sector state
+  const S = W.SECTOR, sc = [(S.x0+S.x1)/2, (S.z0+S.z1)/2];
+  let busy = false, warn = false;
+  G.tr.forEach(t => {
+    if (t.tw) stepTween(t, dt);
+    if (!t.crossing) return;
+    const inS = t.pos[0] > S.x0 && t.pos[0] < S.x1 && t.pos[2] > S.z0 && t.pos[2] < S.z1;
+    if (inS && !t.inS){ t.inS = true; G.ac.filter(a => a.st==='approach').forEach(a => { violation('sector_loss', a, 100); goAround(a); }); }
+    if (!inS && t.inS){ t.inS = false; t.passed = true; }
+    if (inS) busy = true;
+    else if (!t.passed && Math.hypot(t.pos[0]-sc[0], t.pos[2]-sc[1]) < 330) warn = true;
+  });
+  G.sectorBusy = busy; G.sectorWarn = warn && !busy;
+
+  G.ac.slice().forEach(a => {
+    if (a.tw) stepTween(a, dt);
+    if (a.st==='holding'){ a.ang += dt*0.9; const c = W.HOLD[a.hold]; const nx = c[0] + Math.cos(a.ang)*W.HR, nz = c[2] + Math.sin(a.ang)*W.HR; a.heading = Math.atan2(nx-a.pos[0], nz-a.pos[2]); a.pos = [nx, c[1], nz];
+      if (a.nordo){ a.nordoT -= dt; if (a.nordoT <= 0){ log(`${a.cs}: (두절) 사전 절차대로 최종접근 시작`, 'sys'); startApproach(a); } } }
+    if (a.st==='turn' && !G.fire[a.stand]){ a.turn -= dt; if (a.turn <= 0) finishTurn(a); }
+    if (a.st==='deboard'){ a.turn -= dt; if (a.turn <= 0){ log(`${a.cs}: 임시 주기장 승객 하기 완료`); removeAc(a); } }
+    if (['inbound','holding','approach','goaround'].includes(a.st)){
+      a.bat -= dt * (a.emg ? 0.6 : 0.3);
+      if (a.bat <= 12 && !a.emg){ a.emg = true; G.stats.viol++; addScore(-50); G.incidents.push({ t:fmt(G.len-G.t), title:a.cs+' · '+LESSON.battery[0], lesson:LESSON.battery[1], pts:-50 }); log(`${a.cs}: 배터리 12%, 비상 선언 −50`, 'bad'); flashToast('배터리 비상', a.cs, true); }
+      if (a.bat <= 0){ a.bat = 0; G.stats.forced++; addScore(-300); G.incidents.push({ t:fmt(G.len-G.t), title:a.cs+' · '+LESSON.forced[0], lesson:LESSON.forced[1], pts:-300 }); log(`${a.cs}: 배터리 소진, 강제 착륙 −300`, 'bad'); removeAc(a); }
+    }
+  });
+
+  // end checks
+  if (G.stats.forced > 0 || G.stats.viol > G.m.limit){ endMission(false, G.stats.forced>0 ? '강제 착륙이 발생했습니다.' : `위반이 ${G.m.limit}회를 넘었습니다.`); return; }
+  if (goalsMet()){ if (G.goalsMetAt==null){ G.goalsMetAt = G.t; flashToast('목표 달성', '잠시 후 미션이 끝납니다', false); log('미션 목표 달성', 'good'); } else if (G.t - G.goalsMetAt > 2.5){ endMission(true); return; } }
+  if (G.t >= G.len){ endMission(goalsMet(), goalsMet() ? '' : '시간 안에 목표를 채우지 못했습니다.'); }
+}
+function goalsMet(){ return Object.entries(G.m.goals).every(([k,v]) => (k==='ev' ? G.stats.evOk : G.stats[k]) >= v); }
+
+/* =========================================================
+   RENDER: 3D sync
+   ========================================================= */
+const COL = { arr:0xF2A93B, dep:0x5AA6EE, emg:0xEF6A55, nordo:0x8E9AA8, park:0x7C8DA0 };
+function craftColor(a){ if (a.emg) return COL.emg; if (a.nordo) return COL.nordo; if (a.st==='turn' || a.st==='deboard') return COL.park; return a.kind==='dep' ? COL.dep : COL.arr; }
+function sync3D(time){
+  const O = R.objs, f = G.flags;
+  const blink = (id) => ((time*1.1 + id*0.37) % 1) < 0.07;
+  G.ac.forEach(a => {
+    a.mesh.position.set(a.pos[0], a.pos[1] + 2.9, a.pos[2]); a.mesh.rotation.y = a.heading + Math.PI;
+    const ud = a.mesh.userData, c = craftColor(a);
+    ud.status.color.setHex(c); ud.status.emissive.setHex(c); ud.status.emissiveIntensity = a.emg ? (Math.sin(time*8) > 0 ? 2.8 : 0.2) : (G.sel===a.id ? 2.8 : 1.3);
+    const spin = ['turn','deboard','ready'].includes(a.st) ? 0 : 0.9; ud.rotors.forEach((r,i) => r.rotation.y += spin * (i%2 ? 1 : -1));
+    ud.strobe.visible = blink(a.id);
+    const moving = !!a.tw && AIR.concat(['enroute','takeoff']).includes(a.st); a.mesh.rotation.x = moving ? -0.06 : 0;
+  });
+  G.tr.forEach(t => { t.mesh.position.set(...t.pos); t.mesh.rotation.y = t.heading + Math.PI; t.mesh.rotation.x = -0.06; const ud = t.mesh.userData; ud.rotors.forEach((r,i) => r.rotation.y += 0.9*(i%2?1:-1)); ud.strobe.visible = blink(t.id); ud.status.color.setHex(0x8E9AA8); ud.status.emissive.setHex(0x8E9AA8); });
+  const closed = f.closed>0 || f.inspect>0, res = fatoReserved(null);
+  O.fatoLight.color.setHex(closed ? 0xFF4030 : res ? 0xFFB030 : 0x3CFF9A);
+  O.fatoTint.color.setHex(closed ? 0xA8402F : res ? 0xB8862F : 0x2F8F6A); O.fatoTint.opacity = closed ? 0.3 : res ? 0.14 : 0.0;
+  ['A','B','C'].forEach(s => { const st = O.stands[s]; const off = !G.m.stands.includes(s); const occ = G.stands[s] && byId(G.stands[s]);
+    st.mat.color.setHex(G.fire[s] ? 0xEF6A55 : off ? 0x56687E : occ ? 0x5AA6EE : 0x4CC38A); st.mat.opacity = off ? 0.3 : 0.13; st.off.visible = off;
+    st.screen.material.color.setHex(G.fire[s] ? 0xFF3A2A : occ && occ.st==='turn' ? 0x4CC38A : 0x4FA3FF); });
+  const showSec = !!G.m.transit && R.hud; [O.sector, O.sectorEdge, O.transitLine, O.transitLabel].forEach(o => o.visible = showSec);
+  const sc = G.sectorBusy ? 0xEF6A55 : G.sectorWarn ? 0xF2A93B : 0x4CC38A;
+  O.sectorMat.color.setHex(sc); O.sectorMat.opacity = G.sectorBusy ? 0.15 : G.sectorWarn ? 0.1 : 0.035; O.sectorEdge.material.color.setHex(sc);
+  O.final.material.color.setHex(closed || hazardNow() || G.sectorBusy ? 0xEF6A55 : G.sectorWarn ? 0xF2A93B : 0x4CC38A);
+  O.fod.visible = !!f.fod;
+  O.gust.visible = f.gust > 0; if (O.gust.visible) O.gust.children.forEach((g,i) => { g.position.x += 4 + (i%3); if (g.position.x > 170) g.position.x = -230; });
+  O.sock.rotation.y = 0.5 + Math.sin(time*(f.gust>0 ? 7 : 1.3)) * (f.gust>0 ? 0.3 : 0.1); O.sock.rotation.z = f.gust>0 ? Math.sin(time*11)*0.05 : -0.35;
+  const fireS = Object.keys(G.fire)[0];
+  O.fire.visible = !!fireS; if (fireS){ const p = W.STAND[fireS]; O.fire.position.set(p[0], ROOF, p[2]); const k = 1 + Math.sin(time*14)*0.12; O.flame.scale.set(k, 1 + Math.sin(time*9)*0.22, k); O.fireLight.intensity = 2.4 + Math.sin(time*11)*0.8; O.fireGlow.scale.setScalar(30 + Math.sin(time*13)*4);
+    O.smoke.forEach((sm,i) => { const ph = (time*0.35 + i/6) % 1; sm.position.set(Math.sin(i*1.7)*3 + ph*12, 12 + ph*70, Math.cos(i*1.3)*3); sm.scale.setScalar(0.5 + ph*2.2); sm.material.opacity = 0.55*(1-ph); }); }
+  O.drone.visible = f.drone > 0; if (O.drone.visible){ O.drone.position.set(-150 + Math.sin(time*0.6)*60, 92 + Math.sin(time*1.7)*6, Math.sin(time*1.2)*45); O.droneRing.scale.setScalar(1 + Math.sin(time*6)*0.12); O.drone.userData.rotors.forEach(r => r.rotation.y += 1.1); O.drone.userData.strobe.visible = Math.sin(time*9) > 0.6; }
+  O.truck.visible = !!(f.rescue && G.ac.some(a => a.emg)); if (O.truck.visible){ const on = Math.sin(time*10) > 0; O.truckLights[0].visible = on; O.truckLights[1].visible = !on; }
+  O.beaconMat.opacity = Math.sin(time*2.6) > 0.2 ? 1 : 0.12;
+}
+/* camera anim & follow */
+function updateCam(dt){
+  if (R.camAnim){ const a = R.camAnim; a.t = Math.min(1, a.t + dt/0.9); const e = a.t<.5 ? 2*a.t*a.t : 1 - Math.pow(-2*a.t+2, 2)/2;
+    R.camera.position.lerpVectors(a.from.pos, a.to.pos, e); R.controls.target.lerpVectors(a.from.tgt, a.to.tgt, e); if (a.t >= 1) R.camAnim = null; }
+  if (R.camMode==='follow' && G && G.sel){ const a = byId(G.sel); if (a){ const tgt = new THREE.Vector3(a.pos[0], a.pos[1], a.pos[2]); const d = tgt.clone().sub(R.controls.target).multiplyScalar(Math.min(1, dt*4)); R.controls.target.add(d); R.camera.position.add(d); } }
+  R.controls.update();
+}
+
+/* =========================================================
+   UI: labels, queue, board
+   ========================================================= */
+const ST_TXT = { inbound:'진입 중', holding:'대기 선회', approach:'최종접근', goaround:'복행 중', divert:'전환 중', landed:'FATO 위 (착륙)', taxi_in:'스탠드로 이동', turn:'턴어라운드', ready:'스탠드 대기', taxi_out:'FATO로 이동', lineup:'FATO 위 (이륙 대기)', takeoff:'이륙 중', enroute:'회랑 비행', apron:'임시 주기장 이동', deboard:'승객 하기' };
+const REQ_TXT = { land:'착륙 요청', stand:'스탠드 요청', taxi:'지상이동 요청', takeoff:'이륙 요청' };
+function kindTag(a){ if (a.emg) return '<span class="tag emg">비상</span>'; if (a.nordo) return '<span class="tag nordo">두절</span>'; return a.kind==='dep' ? '<span class="tag dep">출발</span>' : '<span class="tag arr">도착</span>'; }
+function actionsFor(a){
+  const L = [], add = (k, label, cls) => { const c = (k==='land'||k==='taxi'||k==='takeoff') ? check(a, k) : null; L.push({ k, label, cls, warn: c && G.assist ? c[2] : '' }); };
+  if (a.nordo) return L;
+  if (a.st==='holding'){ add('land','착륙 허가','go'); add('divert','전환','away'); }
+  else if (a.st==='inbound'){ add('divert','전환','away'); }
+  else if (a.st==='approach'){ add('hold','복행 · 대기','stop'); }
+  else if (a.st==='landed'){ const fs = ['A','B','C'].filter(availStand); fs.forEach(s => add('stand'+s, '스탠드 '+s, 'go')); if (!fs.length) add('apron','임시 주기장','stop'); }
+  else if (a.st==='ready'){ add('taxi','지상이동','go'); }
+  else if (a.st==='lineup'){ add('takeoff','이륙 허가','go'); }
+  return L;
+}
+const btnHTML = (a, x) => `<button class="ab ${x.warn ? 'warn' : x.cls}" data-id="${a.id}" data-k="${x.k}">${x.warn ? '⚠ ' : ''}${x.label}${x.warn ? `<small>${esc(x.warn)}</small>` : ''}</button>`;
+const proj = new (window.THREE ? THREE.Vector3 : Object)();
+function updateLabels(){
+  const box = $('#labels'), w = R.view.clientWidth, h = R.view.clientHeight;
+  const all = G.ac.filter(a => a.st!=='enroute' || true).concat(G.tr);
+  all.forEach(a => {
+    if (!a.label){ a.label = document.createElement('div'); a.label.className = 'lb'; a.label.dataset.id = a.id; box.appendChild(a.label); }
+    proj.set(a.pos[0], a.pos[1] + 9, a.pos[2]).project(R.camera);
+    const vis = proj.z < 1 && proj.x > -1.2 && proj.x < 1.2 && proj.y > -1.2 && proj.y < 1.2;
+    a.label.style.display = vis ? '' : 'none'; if (!vis) return;
+    a.label.style.transform = `translate(${((proj.x+1)/2*w).toFixed(1)}px, ${((1-proj.y)/2*h).toFixed(1)}px) translate(-50%, -100%)`;
+    let sig, html, cls;
+    if (a.st==='transit'){ cls = 'lb transit'; sig = 't'; html = `<div class="chip"><b>${a.cs}</b><span>통과</span></div>`; }
+    else {
+      const sel = G.sel===a.id, coachMe = !!(COACH && COACH.id===a.id), acts = (sel || coachMe) ? actionsFor(a) : [];
+      const bat = Math.round(a.bat), air = ['inbound','holding','approach','goaround'].includes(a.st);
+      const rq = a.nordo && a.st==='holding' ? `두절 · ${Math.ceil(a.nordoT)}초 뒤 접근` : a.emg ? '비상' + (a.req ? ' · '+REQ_TXT[a.req] : '') : a.req ? REQ_TXT[a.req] : (a.st==='enroute' ? a.to+'행' : a.st==='turn' ? '턴어라운드 '+Math.ceil(a.turn)+'초' : '');
+      cls = 'lb' + (a.emg ? ' emg' : a.req ? ' req' : '') + (sel ? ' sel' : '');
+      sig = [cls, rq, sel, coachMe, acts.map(x => x.k + x.warn).join(','), air && G.flags.sys<=0 ? Math.round(bat/5) : 'x'].join('|');
+      html = `<div class="chip"><b>${a.cs}</b>${rq ? `<span class="rq">${esc(rq)}</span>` : ''}</div>` + (air && G.flags.sys<=0 ? `<div class="bb"><i style="width:${Math.max(0,bat)}%;background:${bat<15?'#EF6A55':bat<30?'#F2A93B':'#4CC38A'}"></i></div>` : '') + (acts.length ? `<div class="acts">${acts.map(x => btnHTML(a,x)).join('')}</div>` : '');
+    }
+    if (a.lsig !== sig){ a.lsig = sig; a.label.className = cls; a.label.innerHTML = html; if (COACH && COACH.id===a.id) applyCoach(); }
+  });
+}
+$('#labels').addEventListener('pointerdown', e => {
+  if (!G || !G.running) return;
+  const b = e.target.closest('[data-k]'); if (b){ e.stopPropagation(); doCmd(byId(+b.dataset.id), b.dataset.k); return; }
+  const l = e.target.closest('.lb'); if (l && !l.classList.contains('transit')){ G.sel = +l.dataset.id; refreshUI(true); }
+});
+function queueList(){
+  const pr = a => a.emg ? 0 : a.nordo ? 1 : a.st==='approach' ? 2 : a.req ? 3 : 4;
+  return G.ac.filter(a => a.req || a.emg || a.nordo || a.st==='approach').filter(a => !['divert','enroute','takeoff'].includes(a.st)).sort((a,b) => pr(a)-pr(b) || a.reqT-b.reqT);
+}
+let qsig = '';
+function renderQueue(force){
+  const list = queueList(), sys = G.flags.sys > 0;
+  const sig = list.map(a => [a.id, a.st, a.req, a.emg, a.nordo, G.sel===a.id, actionsFor(a).map(x => x.k+x.warn).join(',')].join(':')).join('/') + '|' + sys;
+  if (force || sig !== qsig){
+    qsig = sig;
+    $('#queue').innerHTML = list.length ? list.map(a => {
+      const acts = actionsFor(a);
+      const info = a.nordo ? `두절 · ${ST_TXT[a.st]}` : (a.req ? REQ_TXT[a.req] : ST_TXT[a.st]);
+      return `<div class="q ${a.emg?'emg':a.req?'req':''} ${G.sel===a.id?'sel':''}" data-id="${a.id}"><div class="h"><b>${a.cs}</b>${kindTag(a)}<span class="s">${esc(info)}${a.from && a.kind==='arr' ? ' · '+a.from : ''}</span><span class="w" id="qw${a.id}"></span></div>${acts.length ? `<div class="acts">${acts.map(x => btnHTML(a,x)).join('')}</div>` : (a.nordo ? '<span class="noone">지시 불가 · FATO와 접근 경로를 비워 두세요</span>' : '')}</div>`;
+    }).join('') : '<p class="noone">대기 중인 요청이 없습니다.</p>';
+    applyCoach();
+  }
+  list.forEach(a => { const el = document.getElementById('qw'+a.id); if (!el) return; const air = ['inbound','holding','approach','goaround'].includes(a.st);
+    el.textContent = sys ? '--' : (air ? Math.round(a.bat)+'%' : '') + (a.req ? ' · '+Math.floor(G.t-a.reqT)+'초' : '');
+    el.style.color = !sys && air && a.bat < 20 ? 'var(--red)' : ''; });
+}
+$('#queue').addEventListener('pointerdown', e => {
+  if (!G || !G.running) return;
+  const b = e.target.closest('[data-k]'); if (b){ doCmd(byId(+b.dataset.id), b.dataset.k); return; }
+  const q = e.target.closest('.q'); if (q){ G.sel = +q.dataset.id; refreshUI(true); }
+});
+function renderBoard(){
+  const m = G.m, s = G.stats;
+  $('#goals').innerHTML = Object.entries(m.goals).map(([k,v]) => { const cur = k==='ev' ? s.evOk : s[k]; const done = cur >= v; return `<div class="g ${done?'done':''}"><span>${GOAL_TXT[k]}</span><span class="mono">${Math.min(cur,v)} / ${v}</span><div class="bar"><i style="width:${Math.min(100, cur/v*100)}%"></i></div></div>`; }).join('')
+    + `<div class="g"><span>위반 허용</span><span class="mono" style="color:${s.viol?'var(--red)':'inherit'}">${s.viol} / ${m.limit}</span></div>`;
+  const f = G.flags, closed = f.closed>0 || f.inspect>0, res = fatoReserved(null);
+  const fe = $('#s-fato'); fe.textContent = closed ? (f.inspect>0 ? `점검 중 ${Math.ceil(f.inspect)}초` : `폐쇄 ${Math.ceil(f.closed)}초`) : f.fod ? '이물질 발견' : res ? '점유' : '사용 가능'; fe.className = 'v ' + (closed||f.fod ? 'bad' : res ? 'warn' : 'ok');
+  const we = $('#s-wind'); we.textContent = f.gust>0 ? '260° 18kt · 돌풍 28kt' : '260° 08kt'; we.className = 'v ' + (f.gust>0 ? 'bad' : 'ok');
+  $('#s-sector-row').hidden = !m.transit;
+  const se = $('#s-sector'); se.textContent = G.sectorBusy ? '통과 교통 통과 중' : G.sectorWarn ? '통과 교통 접근' : '비어 있음'; se.className = 'v ' + (G.sectorBusy ? 'bad' : G.sectorWarn ? 'warn' : 'ok');
+  const sy = $('#s-sys'); sy.textContent = f.sys>0 ? `장애 · ${Math.ceil(f.sys)}초` : '정상'; sy.className = 'v ' + (f.sys>0 ? 'bad' : 'ok');
+  $('#s-stands').innerHTML = ['A','B','C'].map(st => { const off = !m.stands.includes(st), fire = G.fire[st], a = G.stands[st] && byId(G.stands[st]);
+    const txt = off ? '정비 중' : fire ? '화재' : a ? (a.st==='turn' ? `${a.cs} · ${Math.ceil(a.turn)}초` : a.st==='ready' ? `${a.cs} · 출발 대기` : `${a.cs} · 이동`) : '비어 있음';
+    return `<div class="stand ${off?'off':fire?'fire':a?'busy':''}"><b>${st}</b>${txt}</div>`; }).join('');
+  // top
+  const left = G.len - G.t; $('#g-clock').textContent = fmt(left); $('#g-clock').classList.toggle('low', left <= 20);
+  $('#g-score').textContent = Math.round(G.score); $('#g-viol').textContent = `${s.viol}/${m.limit}`; $('#g-viol').classList.toggle('low', s.viol > 0);
+  const fl = []; if (f.closed>0) fl.push(['FATO 폐쇄','']); if (f.inspect>0) fl.push(['FATO 점검','warn']); if (f.fod) fl.push(['이물질','warn']);
+  if (f.gust>0) fl.push(['돌풍 28kt','']); if (f.drone>0) fl.push(['미확인 드론','']); if (f.sys>0) fl.push(['시스템 장애','warn']);
+  if (G.ac.some(a=>a.emg)) fl.push(['비상기','']); if (G.ac.some(a=>a.nordo)) fl.push(['두절 기체','warn']); if (G.sectorBusy) fl.push(['접근 구역 통과 교통','']); else if (G.sectorWarn) fl.push(['통과 교통 접근','warn']);
+  $('#flags').innerHTML = fl.map(([t,c]) => `<span class="flag ${c}">${t}</span>`).join('');
+  if (G.card && !G.card.answered){ const l = Math.max(0, G.card.deadline - G.t); const cl = $('#cleft'), cb = $('#cbar'); if (cl) cl.textContent = Math.ceil(l)+'초'; if (cb) cb.style.width = (l/20*100)+'%'; }
+}
+function computeHint(){
+  if (!G.assist) return null;
+  const f = G.flags;
+  if (G.card && !G.card.answered) return ['오른쪽 <b>상황 카드</b>에서 올바른 조치를 고르세요.', 'bad'];
+  const appr = G.ac.find(a => a.st==='approach');
+  if (appr && (hazardNow() || G.sectorBusy || G.sectorWarn)) return [`<b>${appr.cs}</b>가 최종접근 중입니다. ${G.sectorWarn||G.sectorBusy ? '통과 교통이 다가옵니다.' : hazardNow()+' 상황입니다.'} <b>복행 · 대기</b>를 지시하세요.`, 'bad', { id:appr.id, k:'hold' }];
+  const emg = G.ac.find(a => a.emg && a.st==='holding');
+  if (emg) return [`비상기 <b>${emg.cs}</b>를 최우선으로 착륙시키세요.${hazardNow() ? ' ('+hazardNow()+' 해제 즉시)' : ''}`, 'bad', check(emg,'land') ? null : { id:emg.id, k:'land' }];
+  const nordo = G.ac.find(a => a.nordo && a.st==='holding');
+  if (nordo) return [`두절 기체 <b>${nordo.cs}</b>가 ${Math.ceil(nordo.nordoT)}초 뒤 스스로 접근합니다. FATO를 비워 두고 다른 허가를 미루세요.`, 'warn'];
+  const landed = G.ac.find(a => a.st==='landed');
+  if (landed){ const fs = ['A','B','C'].find(availStand); return [`<b>${landed.cs}</b>가 FATO 위에 있습니다. <b>${fs ? '스탠드 '+fs : '임시 주기장'}</b>으로 보내 FATO를 비우세요.`, '', { id:landed.id, k: fs ? 'stand'+fs : 'apron' }]; }
+  if (hazardNow()) return [`<b>${hazardNow()}</b> 중입니다. 이착륙을 멈추고 기다리세요.`, 'warn'];
+  if (G.sectorBusy || G.sectorWarn) return ['통과 교통이 최종접근 구역을 지나갑니다. 새 착륙 · 이륙 허가를 보류하세요.', 'warn'];
+  const lu = G.ac.find(a => a.st==='lineup');
+  if (lu && !check(lu,'takeoff')) return [`<b>${lu.cs}</b> <b>이륙 허가</b>를 낼 수 있습니다.`, '', { id:lu.id, k:'takeoff' }];
+  const holds = G.ac.filter(a => a.st==='holding' && !a.nordo).sort((x,y) => x.bat - y.bat);
+  if (holds.length){ const h = holds[0]; const c = check(h,'land'); if (!c) return [`<b>${h.cs}</b>(배터리 ${Math.round(h.bat)}%) <b>착륙 허가</b>를 낼 수 있습니다.`, '', { id:h.id, k:'land' }];
+    if (c[0]==='no_stand'){ const r = G.ac.find(a => a.st==='ready'); return [`빈 스탠드가 없습니다. ${r ? '<b>'+r.cs+'</b>를 먼저 출발시켜 스탠드를 비우세요.' : '턴어라운드가 끝나길 기다리세요.'}`, 'warn', r && !check(r,'taxi') ? { id:r.id, k:'taxi' } : null]; } }
+  const rd = G.ac.find(a => a.st==='ready');
+  if (rd && !check(rd,'taxi') && !G.ac.some(a => ['approach'].includes(a.st))) return [`<b>${rd.cs}</b>를 <b>지상이동</b>으로 FATO에 올릴 수 있습니다.`, '', { id:rd.id, k:'taxi' }];
+  return ['요청을 기다리는 중입니다. 광역 화면에서 들어오는 기체를 확인하세요.', ''];
+}
+let COACH = null;
+function renderHint(){
+  const h = (G.briefing || !G.running) ? null : computeHint(), el = $('#hint');
+  COACH = h && h[2] ? h[2] : null;
+  if (!h){ el.hidden = true; } else { el.hidden = false; el.className = 'hint ' + h[1]; const txt = h[0] + (COACH ? ' <span style="color:var(--amber)">· 깜빡이는 버튼을 누르세요</span>' : ''); if (el.dataset.t !== txt){ el.dataset.t = txt; el.innerHTML = txt; } }
+  applyCoach();
+}
+function applyCoach(){
+  document.querySelectorAll('.ab.coach').forEach(b => b.classList.remove('coach'));
+  if (!COACH) return;
+  document.querySelectorAll(`.ab[data-id="${COACH.id}"][data-k="${COACH.k}"]`).forEach(b => b.classList.add('coach'));
+}
+function renderLog(){ if (!G.logDirty) return; G.logDirty = false; const el = $('#log'); el.innerHTML = G.logs.slice(-40).map(m => `<div class="m ${m.cls==='me'?'':m.cls}"><span class="tt">${m.t}</span><span>${esc(m.text)}</span></div>`).join(''); el.scrollTop = el.scrollHeight; }
+function refreshUI(force){ renderQueue(force); renderBoard(); renderHint(); if (force) G.ac.forEach(a => a.lsig = ''); }
+
+/* =========================================================
+   FLOW
+   ========================================================= */
+function clearScene(){ if (!G) return; G.ac.forEach(a => { if (a.mesh) R.scene.remove(a.mesh); a.label && a.label.remove(); }); G.tr.forEach(t => { R.scene.remove(t.mesh); t.label && t.label.remove(); }); $('#labels').innerHTML = ''; }
+function startMission(m){
+  show('gamebox');
+  if (!initThree()){ $('#view').innerHTML = '<div class="fatal"><h2>3D 화면을 열 수 없습니다</h2><p>이 브라우저에서 WebGL을 쓸 수 없거나 3D 라이브러리를 불러오지 못했습니다. 다른 브라우저에서 열어 보세요.</p></div>'; return; }
+  clearScene(); newState(m);
+  $('#g-no').textContent = `미션 ${m.id}`; $('#g-title').textContent = m.title;
+  $('#g-guide').innerHTML = m.guide.map(g => `<li>${g}</li>`).join(''); $('#mguide').open = m.id <= 3;
+  $('#g-assist').checked = G.assist;
+  (m.init||[]).forEach(s => { const a = mkAc('dep'); a.st='turn'; a.stand=s.s; a.turn=s.turn; a.turnMax=Math.max(s.turn, 14); a.pos = W.STAND[s.s].slice(); a.from='도착편'; G.stands[s.s] = a.id; addMesh(a); G.ac.push(a); });
+  $('#endbox').hidden = true; $('#pausebox').hidden = true; G.card = null; renderCard();
+  setCam(m.cam, true);
+  G.running = true; G.briefing = true;
+  refreshUI(true);
+  showBrief(false);
+}
+function showBrief(resume){
+  const m = G.m; G.briefing = true;
+  const goals = Object.entries(m.goals).map(([k,v]) => `<div class="goal"><span>${GOAL_TXT[k]}</span><b>${v}${k==='ev' && m.events==='random' ? ' / 6' : ''}</b></div>`).join('') + (m.stands.length<3 ? `<div class="goal"><span>사용 가능한 스탠드</span><b>${m.stands.join(' · ')}</b></div>` : '');
+  const howto = m.id <= 3 ? `<div><p class="label" style="margin-bottom:6px">화면 보는 법</p><div class="howto">
+      <div><b>① 3D 현장</b>드론 이름표를 누르면 그 자리에 지시 버튼이 뜹니다. 드래그로 회전, 휠로 확대.</div>
+      <div><b>② 요청 · 지시 (오른쪽 위)</b>요청이 들어온 드론이 위에서부터 쌓입니다. 버튼 하나로 바로 지시합니다.</div>
+      <div><b>③ 상황판 (오른쪽 아래)</b>목표 진행, FATO · 바람 · 스탠드 상태를 확인합니다.</div></div></div>` : '';
+  $('#bov').innerHTML = `<div class="bov-card">
+    <p class="label">미션 ${m.id} / 15 · 제한 시간 ${fmt(m.min*60)} · 새로 배우는 것: ${esc(m.skill)}</p>
+    <h2>${esc(m.title)}</h2>
+    <p style="color:#D5DEE7">${esc(m.story)}</p>
+    ${howto}
+    <div class="bov-grid">
+      <div><p class="label">이렇게 하세요</p><ol class="guide">${m.guide.map(g => `<li><span>${g}</span></li>`).join('')}</ol></div>
+      <div><p class="label">미션 목표</p><div class="goals">${goals}</div>
+        <div class="warnbox">실패: 위반 ${m.limit+1}회 이상, 강제 착륙 1회, 시간 안에 목표 미달성</div>
+        <div class="tipbox"><b>팁</b> · ${esc(m.tip)}</div>
+        ${m.assist ? '<div class="tipbox"><b>가이드 켜짐</b> · 미션 중 화면 위 안내와 <b>깜빡이는 버튼</b>이 다음에 할 일을 알려 줍니다.</div>' : '<div class="tipbox"><b>가이드 꺼짐</b> · 막히면 상단 <b>가이드</b> 스위치를 켜세요.</div>'}
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn primary big" id="bov-go">${resume ? '계속하기' : '미션 시작'}</button>${resume ? '' : '<button class="btn big" id="bov-menu">메인 화면</button>'}</div>
+  </div>`;
+  $('#bov').hidden = false;
+  $('#bov-go').onclick = () => { $('#bov').hidden = true; G.briefing = false; if (!resume) log(`미션 ${m.id} 시작 · ${m.title}`, 'sys'); refreshUI(true); };
+  if ($('#bov-menu')) $('#bov-menu').onclick = () => $('#g-quit').click();
+  renderHint();
+}
+$('#howbtn').onclick = () => { if (G && G.running && !G.briefing) showBrief(true); };
+$('#g-assist').onchange = e => { if (G){ G.assist = e.target.checked; refreshUI(true); } };
+function togglePause(){ if (!G || !G.running) return; G.paused = !G.paused; $('#pausebox').hidden = !G.paused; $('#g-pause').textContent = G.paused ? '계속' : '일시정지'; }
+$('#g-pause').onclick = togglePause; $('#resume').onclick = togglePause;
+$('#g-quit').onclick = () => { if (G){ G.running = false; clearScene(); } $('#bov').hidden = true; renderMenu(); show('menu'); };
+document.addEventListener('keydown', e => { if (e.code==='Space' && G && G.running && !G.briefing && !$('#gamebox').hidden){ e.preventDefault(); togglePause(); } });
+document.addEventListener('visibilitychange', () => { if (document.hidden && G && G.running && !G.paused && !G.briefing) togglePause(); });
+
+function endMission(ok, why){
+  if (G.ended) return; G.ended = true; G.running = false;
+  const m = G.m, s = G.stats;
+  const allEv = s.evTot === 0 || s.evOk === s.evTot;
+  const timeLeftRatio = (G.len - G.t) / G.len;
+  const st = !ok ? 0 : (s.viol === 0 && allEv && timeLeftRatio >= 0.2) ? 3 : s.viol === 0 ? 2 : 1;
+  if (ok){ PROG.stars[m.id] = Math.max(PROG.stars[m.id]||0, st); PROG.unlocked = Math.max(PROG.unlocked, Math.min(15, m.id+1)); saveProg(PROG); }
+  const next = MISSIONS.find(x => x.id === m.id+1);
+  const inc = G.incidents.length ? G.incidents.map(i => `<div class="i"><span class="tt">${i.t}</span><span>${esc(i.title)}<span class="k">${esc(i.lesson)}</span></span><span class="p ${i.pts<0?'neg':'pos'}">${i.pts>0?'+':''}${i.pts}</span></div>`).join('') : '<p class="noone">위반이나 잘못된 조치가 없습니다.</p>';
+  const goals = Object.entries(m.goals).map(([k,v]) => { const cur = k==='ev' ? s.evOk : s[k]; return `<div class="goal"><span>${GOAL_TXT[k]}</span><b style="color:${cur>=v?'var(--green)':'var(--red)'}">${cur} / ${v}</b></div>`; }).join('');
+  $('#enddialog').innerHTML = `
+    <p class="label">미션 ${m.id} · ${esc(m.title)}</p>
+    <h2 style="color:${ok?'var(--green)':'var(--red)'}">${ok ? '미션 성공' : '미션 실패'}</h2>
+    ${ok ? `<p class="big-stars">${stars(st)}</p><p style="color:var(--muted);font-size:13px">★ 목표 달성 · ★★ 위반 없음 · ★★★ 위반 없음 + 상황 조치 모두 정답 + 시간 20% 이상 남김</p>` : `<p>${esc(why||'')}</p>`}
+    <div class="stats">
+      <div class="stat"><p class="label">점수</p><p class="v">${Math.round(G.score)}</p></div>
+      <div class="stat"><p class="label">착륙 · 출발</p><p class="v">${s.land} · ${s.dep}</p></div>
+      <div class="stat"><p class="label">상황 조치</p><p class="v">${s.evOk} / ${s.evTot}</p></div>
+      <div class="stat"><p class="label">위반</p><p class="v" style="color:${s.viol?'var(--red)':'var(--fg)'}">${s.viol}</p></div>
+    </div>
+    <div><p class="label" style="margin-bottom:6px">목표</p><div class="goals">${goals}</div></div>
+    <div><p class="label" style="margin-bottom:6px">복기 · 놓친 원칙</p><div class="inc">${inc}</div></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      ${ok && next ? `<button class="btn primary" id="e-next" style="padding:12px 20px">다음 미션: ${esc(next.title)}</button>` : ''}
+      <button class="btn ${ok && next ? '' : 'primary'}" id="e-retry" style="padding:12px 20px">다시 하기</button>
+      <button class="btn" id="e-menu" style="padding:12px 20px">미션 목록</button>
+    </div>`;
+  $('#endbox').hidden = false;
+  if ($('#e-next')) $('#e-next').onclick = () => { $('#endbox').hidden = true; clearScene(); openBrief(next.id); };
+  $('#e-retry').onclick = () => { $('#endbox').hidden = true; clearScene(); openBrief(m.id); };
+  $('#e-menu').onclick = () => { $('#endbox').hidden = true; clearScene(); renderMenu(); show('menu'); };
+}
+
+/* main loop */
+let last = 0, uiAcc = 0, elapsed = 0;
+function frame(ts){
+  const dt = Math.min(0.1, (ts - last)/1000 || 0); last = ts; elapsed += dt;
+  if (R && G && !$('#gamebox').hidden){
+    if (G.running && !G.paused && !G.briefing){ update(dt); uiAcc += dt; if (uiAcc > 0.2){ uiAcc = 0; renderQueue(false); renderBoard(); renderHint(); } renderLog(); }
+    if (G.ac){ sync3D(elapsed); updateCam(dt); updateLabels(); }
+    R.renderer.render(R.scene, R.camera);
+  }
+  requestAnimationFrame(frame);
+}
+renderMenu();
+requestAnimationFrame(frame);
+</script>
+
+</body>
+</html>
