@@ -367,12 +367,12 @@ const MISSIONS = [
   { id:1, tier:1, title:'첫 착륙', skill:'착륙 · 스탠드 배정', min:2, cam:'near', assist:true, stands:['A','B','C'],
     story:'근무 첫날입니다. 김포 방면에서 도착기 2대가 들어옵니다. 착륙을 허가하고 스탠드로 보내 FATO를 비우세요.',
     guide:[BASE_GUIDE.land, '착륙하면 FATO가 노란색(점유)으로 바뀝니다.', BASE_GUIDE.stand, '두 번째 기체도 같은 순서로 처리합니다.'],
-    goals:{ park:2 }, limit:3, script:[{t:2,o:'김포'},{t:35,o:'수서'}], spawn:null, transit:false, events:[],
+    goals:{ park:2 }, limit:3, script:[{t:2,o:'김포'},{t:30,o:'수서'},{t:58,o:'잠실'}], spawn:null, transit:false, events:[],
     tip:'화면의 기체 이름표나 오른쪽 요청 카드의 버튼을 누르면 바로 지시됩니다. 마우스 드래그로 시점을 돌리고 휠로 확대합니다.' },
   { id:2, tier:1, title:'첫 출발', skill:'지상이동 · 이륙 허가', min:2, cam:'near', assist:true, stands:['A','B','C'],
     story:'스탠드에서 턴어라운드 중인 기체 2대를 차례로 출발시키세요. 출발기는 이륙 후 회랑으로 넘어갑니다.',
     guide:['턴어라운드가 끝나면 기체가 지상이동을 요청합니다.', '<b>지상이동</b>을 누르면 스탠드에서 FATO로 이동합니다.', 'FATO에 올라서면 이륙을 요청합니다. <b>이륙 허가</b>를 냅니다.', '한 대가 FATO를 떠난 뒤에 다음 기체를 올립니다.'],
-    goals:{ dep:2 }, limit:3, init:[{s:'A',turn:4},{s:'B',turn:24}], script:[], spawn:null, transit:false, events:[],
+    goals:{ dep:2 }, limit:3, init:[{s:'A',turn:4},{s:'B',turn:22},{s:'C',turn:40}], script:[], spawn:null, transit:false, events:[],
     tip:'FATO 위에 기체가 있을 때 다른 기체를 올리면 분리 위반입니다.' },
   { id:3, tier:1, title:'도착과 출발 함께', skill:'공중 기체 우선', min:3, cam:'near', assist:true, stands:['A','B','C'],
     story:'도착기와 출발기가 섞여 들어옵니다. FATO 하나를 번갈아 쓰면서 순서를 정하세요.',
@@ -433,6 +433,13 @@ const MISSIONS = [
     goals:{ land:9, dep:6, ev:5 }, limit:4, init:[{s:'A',turn:10},{s:'B',turn:22}], script:[{t:3,o:'김포'},{t:9,o:'잠실'}], spawn:{ every:14, max:4, bat:[55,78] }, transit:true, events:'random',
     tip:'상황 6개 중 5개 이상을 올바르게 처리해야 합니다.' }
 ];
+/* 목표 상향(×1.5) · 높은 단계 돌발 상황 */
+MISSIONS.forEach(m => ['land','dep','park'].forEach(k => { if (m.goals[k]) m.goals[k] = Math.ceil(m.goals[k] * 1.5); }));
+/* 높은 단계 교통량 · 시간 보정 */
+[[11,{ min:4, spawn:{ every:12, max:4, bat:[52,74] } }],[13,{ min:4.5, spawn:{ every:12, max:4, bat:[52,74] } }],[14,{ min:5, spawn:{ every:12, max:4, bat:[55,78] } }],[15,{ min:5, spawn:{ every:10, max:4, bat:[55,78] }, goals:{ land:9, dep:8, ev:5 } }]]
+  .forEach(([id, o]) => Object.assign(MISSIONS.find(m => m.id===id), o));
+const SURPRISE = { 9:{ n:1, p:0.6 }, 10:{ n:1, p:0.6 }, 11:{ n:1, p:1 }, 12:{ n:1, p:1 }, 13:{ n:2, p:0.8 }, 14:{ n:1, p:1 } };
+MISSIONS.forEach(m => { if (SURPRISE[m.id] || m.events === 'random') m.surprise = true; });
 const TIER_NAME = { 1:['기초 운영','착륙 · 출발 · 순서 · 스탠드'], 2:['상황 대응 입문','광역 교통과 단일 상황'], 3:['고급 상황 · 종합','복합 상황과 최종 평가'] };
 const GOAL_TXT = { park:'스탠드 배정', land:'착륙', dep:'출발', emg:'비상기 착륙', ev:'상황 카드 올바른 조치' };
 
@@ -969,6 +976,17 @@ function newState(m){
     sectorBusy:false, sectorWarn:false };
   const evs = m.events==='random' ? ['gust','fod','mayday','drone','nordo','fire','sys'].sort(() => Math.random()-.5).slice(0,6).map((k,i) => ({ k, t:[30,72,112,155,200,245][i] + rnd(-3,3) })) : m.events.map(e => ({ k:e.k, t:e.t }));
   G.schedule = evs.map(e => ({ ...e, done:false }));
+  const sp = SURPRISE[m.id];
+  if (sp && m.events !== 'random'){
+    const used = new Set(evs.map(e => e.k));
+    const pool = ['gust','fod','mayday','drone','nordo','fire','sys'].filter(k => !used.has(k) && !(k==='fire' && m.stands.length < 3)).sort(() => Math.random()-.5);
+    for (let i=0; i<sp.n && pool.length; i++){
+      if (Math.random() > sp.p) continue;
+      let t = 0, tries = 0;
+      do { t = rnd(60, G.len - 45); tries++; } while (tries < 30 && G.schedule.some(x => x.k && Math.abs(x.t - t) < 32));
+      G.schedule.push({ k:pool.shift(), t, done:false, surprise:true });
+    }
+  }
   (m.script||[]).forEach(s => G.schedule.push({ spawn:s.o, t:s.t, done:false }));
 }
 function mkAc(kind, prefix){
@@ -1178,7 +1196,7 @@ function update(dt){
   if (f.inspect > 0){ f.inspect -= dt; if (f.inspect <= 0){ f.inspect = 0; f.fod = false; log('점검 완료, FATO 사용 재개', 'sys'); } }
   if (f.fod && f.inspect <= 0){ f.fodAuto -= dt; if (f.fodAuto <= 0){ f.fod = false; log('지상요원이 이물질 제거 (늦은 조치)', 'sys'); } }
 
-  G.schedule.forEach(s => { if (!s.done && G.t >= s.t){ s.done = true; if (s.spawn) spawnArrival(s.spawn); else triggerEvent(s.k); } });
+  G.schedule.forEach(s => { if (!s.done && G.t >= s.t){ s.done = true; if (s.spawn) spawnArrival(s.spawn); else { if (s.surprise) log('돌발 상황 발생!', 'bad'); triggerEvent(s.k); } } });
   if (G.card){ if (!G.card.answered && G.t >= G.card.deadline && !G.tutorial) resolveCard(-1, true); else if (G.card.answered && G.t >= G.card.hideAt){ G.card = null; renderCard(); } }
 
   if (G.m.spawn && G.t >= G.nextSpawn){
@@ -1679,7 +1697,7 @@ function renderTut(){
   document.querySelectorAll('.tut-ring').forEach(e => e.classList.remove('tut-ring'));
   let body, btns = '';
   if (st.final){
-    body = `<b>연습 완료!</b> 실제 미션에서는 드론이 계속 들어오고 시간이 흐릅니다.<br>목표: <b>${goalText(T.m)}</b> · 제한 시간 ${fmt(T.m.min*60)} · 위반 ${T.m.limit+1}회 이상이면 실패`;
+    body = `<b>연습 완료!</b> 실제 미션에서는 드론이 계속 들어오고 시간이 흐릅니다.${T.m.surprise ? '<br><b style="color:var(--red)">이 단계부터는 예고 없는 돌발 상황이 생길 수 있습니다.</b>' : ''}<br>목표: <b>${goalText(T.m)}</b> · 제한 시간 ${fmt(T.m.min*60)} · 위반 ${T.m.limit+1}회 이상이면 실패`;
     btns = `<button class="btn primary" id="t-go">미션 시작</button><button class="btn" id="t-again">연습 다시</button>`;
   } else {
     body = typeof st.say === 'function' ? st.say(T) : st.say;
