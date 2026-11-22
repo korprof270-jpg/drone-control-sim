@@ -222,6 +222,22 @@ details.mg ol { margin: 8px 0 0; padding-left: 20px; font-size: 13px; display: f
 @keyframes tm { 0% { box-shadow: 0 0 0 0 rgba(242,169,59,.8); } 100% { box-shadow: 0 0 0 18px rgba(242,169,59,0); } }
 .tut-ring { outline: 3px solid var(--amber) !important; outline-offset: 3px; animation: coach 1.1s ease-in-out infinite; border-radius: 12px; }
 @media (prefers-reduced-motion: reduce) { .tmark, .tut-ring { animation: none; } }
+
+/* name + records */
+.who { margin-top: 18px; display: flex; flex-direction: column; gap: 6px; max-width: 420px; }
+.who-row { display: flex; gap: 8px; }
+.who input { flex: 1; min-width: 0; font: inherit; font-size: 16px; color: var(--fg); background: rgba(8,19,31,.8); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.who input:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
+.who-msg { font-size: 13px; color: var(--muted); min-height: 1.4em; }
+.who-msg b { color: var(--amber); }
+.who.need input { border-color: var(--red); }
+.rec-note { font-size: 13px; color: var(--muted); margin: 4px 0 8px; }
+.tblwrap { overflow-x: auto; }
+table.rec { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 520px; }
+table.rec th { text-align: left; color: var(--muted); font-weight: 700; font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+table.rec td { padding: 7px 8px; border-bottom: 1px solid #1B3049; font-variant-numeric: tabular-nums; }
+table.rec tr.me td { background: rgba(242,169,59,.08); }
+table.rec .ok { color: var(--green); font-weight: 700; } table.rec .ng { color: var(--red); }
 @keyframes pop { from { transform: scale(.97); opacity: .4; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .card { animation: none; } .mcard { transition: none; } }
 @media (max-width: 1080px) { .game { grid-template-columns: minmax(0, 1fr); } .view { height: 58vh; min-height: 340px; } .brief { grid-template-columns: minmax(0, 1fr); } }
@@ -239,10 +255,16 @@ details.mg ol { margin: 8px 0 0; padding-left: 20px; font-size: 13px; display: f
           <p class="label">드론 관제 · 단계별 훈련</p>
           <h1>드론 관제 미션</h1>
           <p class="sub">도심 드론 버티포트의 관제사가 되어 실사풍 3D 현장을 보며 착륙 · 출발을 지시하고 돌발 상황에 대응합니다. 쉬운 미션 1부터 시작해 15단계까지 올라가세요.</p>
+          <form class="who" id="whoform" autocomplete="off">
+            <label for="who-name" class="label">관제사 이름</label>
+            <div class="who-row"><input id="who-name" maxlength="20" placeholder="이름 또는 닉네임" required><button class="btn" type="submit" id="who-save">등록</button></div>
+            <p class="who-msg" id="who-msg"></p>
+          </form>
           <div class="hero-actions">
             <button class="btn primary big" id="m-start">미션 시작</button>
             <button class="btn big" id="m-continue" hidden></button>
             <button class="btn big" id="m-list" aria-expanded="false">미션 선택</button>
+            <button class="btn big" id="m-rec" aria-expanded="false">기록 보기</button>
           </div>
           <p class="prog-line"><span class="label">진행</span> <span class="prog" id="progress">0 / 15</span></p>
         </div>
@@ -251,6 +273,13 @@ details.mg ol { margin: 8px 0 0; padding-left: 20px; font-size: 13px; display: f
           <div class="feat"><b>현장에서 배우는 가이드</b><span>미션마다 3D 시뮬레이터에서 직접 따라 해 보는 연습 후 시작합니다</span></div>
           <div class="feat"><b>광역 · 현장 3D</b><span>다른 버티포트에서 오는 드론과 회랑 교통을 보며 우리 버티포트를 운영합니다</span></div>
         </div>
+      </div>
+      <div id="reclist" class="panel" hidden>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><p class="label" id="rec-title">관제사 기록</p><button class="btn" id="rec-refresh" style="font-size:12px;padding:4px 10px">새로고침</button></div>
+        <p class="rec-note" id="rec-note"></p>
+        <div class="tblwrap"><table class="rec"><thead><tr><th>순위</th><th>이름</th><th>최고 단계</th><th>별</th><th>최고 점수 합</th><th>도전</th><th>최근 기록</th></tr></thead><tbody id="rec-body"></tbody></table></div>
+        <p class="label" style="margin-top:14px">내 단계별 결과 <span id="rec-me"></span></p>
+        <div class="tblwrap"><table class="rec"><thead><tr><th>미션</th><th>결과</th><th>별</th><th>점수</th><th>위반</th><th>도전 횟수</th></tr></thead><tbody id="rec-mine"></tbody></table></div>
       </div>
       <div id="mlist" hidden>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px"><p class="label">미션 선택 · 열린 미션을 누르면 바로 시작합니다</p><button class="btn" id="reset" style="font-size:12px;padding:4px 10px">진행 초기화</button></div>
@@ -410,10 +439,55 @@ const GOAL_TXT = { park:'스탠드 배정', land:'착륙', dep:'출발', emg:'�
 /* =========================================================
    PROGRESS
    ========================================================= */
-const PKEY = 'vtp3d-progress-v1';
-function loadProg(){ try { const p = JSON.parse(localStorage.getItem(PKEY)); if (p && p.unlocked) return p; } catch(e){} return { unlocked:1, stars:{} }; }
-function saveProg(p){ try { localStorage.setItem(PKEY, JSON.stringify(p)); } catch(e){} }
+/* 전체 기록 서버 주소 (Google Apps Script 웹 앱 URL). 비워 두면 이 기기 기록만 보입니다. */
+const RECORD_URL = '';
+const UKEY = 'vtp3d-user', HKEY = 'vtp3d-history-v1';
+const lsGet = (k, d) => { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? d; } catch(e){ return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} };
+let USER = (() => { try { return localStorage.getItem(UKEY) || ''; } catch(e){ return ''; } })();
+const PKEY = () => 'vtp3d-progress-v2:' + (USER || '_');
+function loadProg(){ const p = lsGet(PKEY(), null); return (p && p.unlocked) ? p : { unlocked:1, stars:{} }; }
+function saveProg(p){ lsSet(PKEY(), p); }
 let PROG = loadProg();
+function setUser(name){ USER = name; try { localStorage.setItem(UKEY, name); } catch(e){} PROG = loadProg(); }
+function cleanName(v){ return String(v || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 20); }
+function recordResult(r){
+  const h = lsGet(HKEY, []); h.push(r); if (h.length > 2000) h.splice(0, h.length - 2000); lsSet(HKEY, h);
+  if (!RECORD_URL) return;
+  try { fetch(RECORD_URL, { method:'POST', mode:'no-cors', headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: JSON.stringify(r) }).catch(() => {}); } catch(e){}
+}
+function aggregate(rows){
+  const by = {};
+  rows.forEach(r => {
+    const n = cleanName(r.name); if (!n) return;
+    const u = by[n] || (by[n] = { name:n, best:0, stars:{}, score:{}, tries:0, last:0 });
+    u.tries++; const t = +new Date(r.time) || 0; if (t > u.last) u.last = t;
+    if (r.ok){ const m = +r.mission || 0; if (m > u.best) u.best = m; u.stars[m] = Math.max(u.stars[m] || 0, +r.stars || 0); u.score[m] = Math.max(u.score[m] || 0, +r.score || 0); }
+  });
+  return Object.values(by).map(u => ({ name:u.name, best:u.best, stars:Object.values(u.stars).reduce((a,b) => a+b, 0), score:Object.values(u.score).reduce((a,b) => a+b, 0), tries:u.tries, last:u.last }))
+    .sort((a,b) => b.best - a.best || b.stars - a.stars || b.score - a.score);
+}
+async function loadBoard(){
+  if (RECORD_URL){
+    try { const res = await fetch(RECORD_URL + (RECORD_URL.includes('?') ? '&' : '?') + 'mode=rows', { cache:'no-store' }); const j = await res.json(); if (j && Array.isArray(j.rows)) return { rows:j.rows, shared:true }; } catch(e){}
+    return { rows:lsGet(HKEY, []), shared:false, failed:true };
+  }
+  return { rows:lsGet(HKEY, []), shared:false };
+}
+const fmtDate = t => { if (!t) return '-'; const d = new Date(t); return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
+async function renderRecords(){
+  $('#rec-body').innerHTML = '<tr><td colspan="7" class="noone">불러오는 중…</td></tr>';
+  const { rows, shared, failed } = await loadBoard();
+  $('#rec-title').textContent = shared ? '전체 관제사 기록' : '이 기기의 관제사 기록';
+  $('#rec-note').textContent = shared ? '모든 사용자의 결과가 모입니다. 최고 단계는 성공한 가장 높은 미션입니다.' : failed ? '전체 기록 서버에 연결하지 못해 이 기기 기록만 보여 줍니다.' : '이 기기에서 플레이한 기록입니다. 전체 사용자 기록은 기록 서버를 연결하면 모입니다.';
+  const list = aggregate(rows);
+  $('#rec-body').innerHTML = list.length ? list.map((u,i) => `<tr class="${u.name===USER?'me':''}"><td>${i+1}</td><td>${esc(u.name)}</td><td>${u.best ? '미션 '+u.best : '-'}</td><td>★ ${u.stars}</td><td>${u.score}</td><td>${u.tries}</td><td>${fmtDate(u.last)}</td></tr>`).join('') : '<tr><td colspan="7" class="noone">아직 기록이 없습니다.</td></tr>';
+  const mine = rows.filter(r => cleanName(r.name) === USER);
+  $('#rec-me').textContent = USER ? `· ${USER}` : '';
+  $('#rec-mine').innerHTML = MISSIONS.map(m => { const rs = mine.filter(r => +r.mission === m.id); if (!rs.length) return ''; const okR = rs.filter(r => r.ok);
+    const best = okR.sort((a,b) => (b.stars-a.stars) || (b.score-a.score))[0];
+    return `<tr><td>${m.id}. ${esc(m.title)}</td><td class="${best?'ok':'ng'}">${best ? '성공' : '실패'}</td><td>${best ? '★'.repeat(best.stars) : '-'}</td><td>${best ? best.score : Math.max(...rs.map(r => +r.score||0))}</td><td>${best ? best.viol : '-'}</td><td>${rs.length}</td></tr>`; }).join('') || '<tr><td colspan="6" class="noone">아직 결과가 없습니다.</td></tr>';
+}
 
 /* =========================================================
    HELPERS
@@ -443,13 +517,18 @@ function renderMenu(){
   });
   $('#tiers').innerHTML = h;
   const nx = nextMissionId(); const c = $('#m-continue'); c.hidden = nx <= 1; c.textContent = `이어하기 · 미션 ${nx}`;
-  document.querySelectorAll('.mcard').forEach(b => b.onclick = () => openBrief(+b.dataset.id));
+  document.querySelectorAll('.mcard').forEach(b => b.onclick = () => { if (!needName()) openBrief(+b.dataset.id); });
 }
 $('#reset').onclick = () => { const b = $('#reset'); if (b.dataset.confirm){ PROG = { unlocked:1, stars:{} }; saveProg(PROG); renderMenu(); b.textContent='진행 초기화'; delete b.dataset.confirm; } else { b.dataset.confirm = '1'; b.textContent = '한 번 더 누르면 초기화'; setTimeout(() => { b.textContent='진행 초기화'; delete b.dataset.confirm; }, 3000); } };
 function openBrief(id){ startMission(MISSIONS.find(x => x.id===id)); }
 function nextMissionId(){ return Math.min(15, PROG.unlocked); }
-$('#m-start').onclick = () => openBrief(1);
-$('#m-continue').onclick = () => openBrief(nextMissionId());
+function needName(){ if (USER) return false; const w = $('#whoform'); w.classList.add('need'); $('#who-msg').innerHTML = '미션을 시작하려면 <b>이름을 먼저 등록</b>하세요.'; $('#who-name').focus(); return true; }
+function renderWho(){ $('#who-name').value = USER; $('#who-save').textContent = USER ? '변경' : '등록'; $('#whoform').classList.remove('need'); $('#who-msg').innerHTML = USER ? `<b>${esc(USER)}</b> 관제사로 기록됩니다. 다른 이름으로 바꾸면 그 이름의 진행 상황으로 전환됩니다.` : '이름을 등록하면 단계별 결과가 기록됩니다.'; }
+$('#whoform').addEventListener('submit', e => { e.preventDefault(); const n = cleanName($('#who-name').value); if (!n){ needName(); return; } setUser(n); renderWho(); renderMenu(); if (!$('#reclist').hidden) renderRecords(); });
+$('#m-start').onclick = () => { if (!needName()) openBrief(1); };
+$('#m-continue').onclick = () => { if (!needName()) openBrief(nextMissionId()); };
+$('#m-rec').onclick = () => { const l = $('#reclist'); l.hidden = !l.hidden; $('#m-rec').setAttribute('aria-expanded', !l.hidden); if (!l.hidden) renderRecords(); };
+$('#rec-refresh').onclick = () => renderRecords();
 $('#m-list').onclick = () => { const l = $('#mlist'); l.hidden = !l.hidden; $('#m-list').setAttribute('aria-expanded', !l.hidden); };
 
 /* =========================================================
@@ -1385,6 +1464,7 @@ function endMission(ok, why){
   const timeLeftRatio = (G.len - G.t) / G.len;
   const st = !ok ? 0 : (s.viol === 0 && allEv && timeLeftRatio >= 0.2) ? 3 : s.viol === 0 ? 2 : 1;
   if (ok){ PROG.stars[m.id] = Math.max(PROG.stars[m.id]||0, st); PROG.unlocked = Math.max(PROG.unlocked, Math.min(15, m.id+1)); saveProg(PROG); }
+  recordResult({ time:new Date().toISOString(), name:USER || '이름 없음', mission:m.id, title:m.title, ok, stars:st, score:Math.round(G.score), viol:s.viol, secs:Math.round(G.t), land:s.land, dep:s.dep, ev:`${s.evOk}/${s.evTot}`, reason: ok ? '' : (why || '') });
   const next = MISSIONS.find(x => x.id === m.id+1);
   const inc = G.incidents.length ? G.incidents.map(i => `<div class="i"><span class="tt">${i.t}</span><span>${esc(i.title)}<span class="k">${esc(i.lesson)}</span></span><span class="p ${i.pts<0?'neg':'pos'}">${i.pts>0?'+':''}${i.pts}</span></div>`).join('') : '<p class="noone">위반이나 잘못된 조치가 없습니다.</p>';
   const goals = Object.entries(m.goals).map(([k,v]) => { const cur = k==='ev' ? s.evOk : s[k]; return `<div class="goal"><span>${GOAL_TXT[k]}</span><b style="color:${cur>=v?'var(--green)':'var(--red)'}">${cur} / ${v}</b></div>`; }).join('');
@@ -1657,7 +1737,7 @@ function frame(ts){
   }
   requestAnimationFrame(frame);
 }
-renderMenu();
+renderMenu(); renderWho();
 requestAnimationFrame(frame);
 </script>
 
