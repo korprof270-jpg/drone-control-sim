@@ -207,6 +207,21 @@ details.mg ol { margin: 8px 0 0; padding-left: 20px; font-size: 13px; display: f
 .ab.coach::after { content: " ◀"; color: var(--amber); }
 .lb .acts .ab.coach::after { content: ""; }
 @media (prefers-reduced-motion: reduce) { .ab.coach { animation: none; } }
+
+/* practice caption */
+.tcap { position: absolute; left: 0; top: 0; width: min(380px, calc(100% - 20px)); background: rgba(14,29,46,.97); border: 2px solid var(--amber); border-radius: 14px; padding: 12px 14px; z-index: 4; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.45); }
+.tcap.arrow::after { content: ""; position: absolute; left: var(--ax, 50%); bottom: -11px; transform: translateX(-50%); border: 10px solid transparent; border-top-color: var(--amber); border-bottom: 0; }
+.tcap.arrow.below::after { bottom: auto; top: -11px; border-top: 0; border-bottom: 10px solid var(--amber); }
+.tcap.toright::after { content: "▶"; position: absolute; right: -22px; top: 14px; color: var(--amber); font-size: 18px; }
+.t-step { font-size: 11px; font-weight: 700; letter-spacing: .06em; color: var(--amber); }
+.t-say { font-size: 14px; line-height: 1.55; }
+.t-btns { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.t-do { font-size: 12px; color: var(--muted); }
+.t-skip { margin-left: auto; font-size: 12px; padding: 4px 10px; }
+.tmark { position: absolute; left: 0; top: 0; width: 46px; height: 46px; margin: -23px 0 0 -23px; border: 3px solid var(--amber); border-radius: 50%; pointer-events: none; z-index: 3; animation: tm 1.2s ease-out infinite; }
+@keyframes tm { 0% { box-shadow: 0 0 0 0 rgba(242,169,59,.8); } 100% { box-shadow: 0 0 0 18px rgba(242,169,59,0); } }
+.tut-ring { outline: 3px solid var(--amber) !important; outline-offset: 3px; animation: coach 1.1s ease-in-out infinite; border-radius: 12px; }
+@media (prefers-reduced-motion: reduce) { .tmark, .tut-ring { animation: none; } }
 @keyframes pop { from { transform: scale(.97); opacity: .4; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .card { animation: none; } .mcard { transition: none; } }
 @media (max-width: 1080px) { .game { grid-template-columns: minmax(0, 1fr); } .view { height: 58vh; min-height: 340px; } .brief { grid-template-columns: minmax(0, 1fr); } }
@@ -233,7 +248,7 @@ details.mg ol { margin: 8px 0 0; padding-left: 20px; font-size: 13px; display: f
         </div>
         <div class="feats">
           <div class="feat"><b>15단계 미션</b><span>착륙 · 출발부터 돌풍, 비상 착륙, 화재, 드론 침입, 복합 상황까지 차례로</span></div>
-          <div class="feat"><b>현장에서 배우는 가이드</b><span>미션 화면에서 해야 할 일과 눌러야 할 버튼을 바로 알려 줍니다</span></div>
+          <div class="feat"><b>현장에서 배우는 가이드</b><span>미션마다 3D 시뮬레이터에서 직접 따라 해 보는 연습 후 시작합니다</span></div>
           <div class="feat"><b>광역 · 현장 3D</b><span>다른 버티포트에서 오는 드론과 회랑 교통을 보며 우리 버티포트를 운영합니다</span></div>
         </div>
       </div>
@@ -263,11 +278,13 @@ details.mg ol { margin: 8px 0 0; padding-left: 20px; font-size: 13px; display: f
           <div class="view" id="view">
             <div id="labels"></div>
             <div class="hint" id="hint" hidden></div>
-            <div class="vtools"><button class="btn" data-cam="wide">광역</button><button class="btn" data-cam="near">버티포트</button><button class="btn" data-cam="tower">관제석</button><button class="btn" data-cam="follow">선택 기체 추적</button><button class="btn" id="hudbtn" aria-pressed="true">HUD</button><button class="btn" id="howbtn">설명</button></div>
+            <div class="vtools"><button class="btn" data-cam="wide">광역</button><button class="btn" data-cam="near">버티포트</button><button class="btn" data-cam="tower">관제석</button><button class="btn" data-cam="follow">선택 기체 추적</button><button class="btn" id="hudbtn" aria-pressed="true">HUD</button><button class="btn" id="howbtn">연습 다시</button></div>
             <div class="flags" id="flags"></div>
             <div class="legend"><i style="background:#F2A93B"></i>도착<i style="background:#5AA6EE"></i>출발<i style="background:#EF6A55"></i>비상<i style="background:#8E9AA8"></i>통과 · 두절</div>
             <div class="toast" id="toast" hidden></div>
             <div class="bov" id="bov" hidden></div>
+            <div class="tmark" id="tmark" hidden></div>
+            <div class="tcap" id="tcap" hidden></div>
           </div>
         </div>
         <div class="col">
@@ -904,6 +921,7 @@ const pathLen = pts => { let s = 0; for (let i=1;i<pts.length;i++) s += Math.hyp
 function log(text, cls){ if (!G) return; G.logs.push({ t:fmt(G.len - G.t), text, cls:cls||'' }); if (G.logs.length > 80) G.logs.shift(); G.logDirty = true; }
 function addScore(n){ G.score += n; }
 function violation(key, a, pts){
+  if (G.tutorial){ flashToast('주의', LESSON[key][0], true); return; }
   const [title, lesson] = LESSON[key];
   G.stats.viol++; addScore(-pts);
   G.incidents.push({ t:fmt(G.len - G.t), title:(a ? a.cs+' · ' : '') + title, lesson, pts:-pts });
@@ -993,6 +1011,7 @@ function check(a, k){
 }
 function doCmd(a, k){
   if (!G.running || G.paused || !a) return;
+  if (G.tutorial && !tutAllows(a, k)) return;
   if (a.nordo && ['land','hold','divert'].includes(k)){ log(`${a.cs}: (응답 없음)`, 'sys'); return; }
   const c = check(a, k);
   if (c && c[1] > 0){ violation(c[0], a, c[1]); refreshUI(true); return; }
@@ -1032,6 +1051,7 @@ function doCmd(a, k){
       tween(a, route, pathLen(route)/65, () => removeAc(a));
     });
   }
+  if (G.tutorial && T) T.cmdDone = { id:a.id, k };
   refreshUI(true);
 }
 
@@ -1065,7 +1085,9 @@ function renderCard(){
   if (c.answered) h += `<p class="why"><b>${c.pick>=0 && ev.opts[c.pick][1]===2 ? '정답' : '올바른 조치'}</b> · ${esc(ev.why)}</p>`;
   box.innerHTML = h + '</div>';
 }
-$('#cardbox').addEventListener('click', e => { const b = e.target.closest('.opt'); if (b && G && G.card && !G.card.answered) resolveCard(+b.dataset.i, false); });
+$('#cardbox').addEventListener('click', e => { const b = e.target.closest('.opt'); if (!(b && G && G.card && !G.card.answered)) return; const i = +b.dataset.i;
+  if (G.tutorial && G.card.ev.opts[i][1] !== 2){ b.classList.add('ng'); flashToast('다시 골라 보세요', G.card.ev.opts[i][1]===1 ? '부분적으로만 맞는 조치입니다' : '이 조치는 위험합니다', true); return; }
+  resolveCard(i, false); });
 
 /* =========================================================
    UPDATE LOOP
@@ -1078,7 +1100,7 @@ function update(dt){
   if (f.fod && f.inspect <= 0){ f.fodAuto -= dt; if (f.fodAuto <= 0){ f.fod = false; log('지상요원이 이물질 제거 (늦은 조치)', 'sys'); } }
 
   G.schedule.forEach(s => { if (!s.done && G.t >= s.t){ s.done = true; if (s.spawn) spawnArrival(s.spawn); else triggerEvent(s.k); } });
-  if (G.card){ if (!G.card.answered && G.t >= G.card.deadline) resolveCard(-1, true); else if (G.card.answered && G.t >= G.card.hideAt){ G.card = null; renderCard(); } }
+  if (G.card){ if (!G.card.answered && G.t >= G.card.deadline && !G.tutorial) resolveCard(-1, true); else if (G.card.answered && G.t >= G.card.hideAt){ G.card = null; renderCard(); } }
 
   if (G.m.spawn && G.t >= G.nextSpawn){
     const air = G.ac.filter(a => ['inbound','holding','approach','goaround'].includes(a.st)).length;
@@ -1108,7 +1130,7 @@ function update(dt){
       if (a.nordo){ a.nordoT -= dt; if (a.nordoT <= 0){ log(`${a.cs}: (두절) 사전 절차대로 최종접근 시작`, 'sys'); startApproach(a); } } }
     if (a.st==='turn' && !G.fire[a.stand]){ a.turn -= dt; if (a.turn <= 0) finishTurn(a); }
     if (a.st==='deboard'){ a.turn -= dt; if (a.turn <= 0){ log(`${a.cs}: 임시 주기장 승객 하기 완료`); removeAc(a); } }
-    if (['inbound','holding','approach','goaround'].includes(a.st)){
+    if (!G.tutorial && ['inbound','holding','approach','goaround'].includes(a.st)){
       a.bat -= dt * (a.emg ? 0.6 : 0.3);
       if (a.bat <= 12 && !a.emg){ a.emg = true; G.stats.viol++; addScore(-50); G.incidents.push({ t:fmt(G.len-G.t), title:a.cs+' · '+LESSON.battery[0], lesson:LESSON.battery[1], pts:-50 }); log(`${a.cs}: 배터리 12%, 비상 선언 −50`, 'bad'); flashToast('배터리 비상', a.cs, true); }
       if (a.bat <= 0){ a.bat = 0; G.stats.forced++; addScore(-300); G.incidents.push({ t:fmt(G.len-G.t), title:a.cs+' · '+LESSON.forced[0], lesson:LESSON.forced[1], pts:-300 }); log(`${a.cs}: 배터리 소진, 강제 착륙 −300`, 'bad'); removeAc(a); }
@@ -1116,6 +1138,7 @@ function update(dt){
   });
 
   // end checks
+  if (G.tutorial){ tutCheck(); return; }
   if (G.stats.forced > 0 || G.stats.viol > G.m.limit){ endMission(false, G.stats.forced>0 ? '강제 착륙이 발생했습니다.' : `위반이 ${G.m.limit}회를 넘었습니다.`); return; }
   if (goalsMet()){ if (G.goalsMetAt==null){ G.goalsMetAt = G.t; flashToast('목표 달성', '잠시 후 미션이 끝납니다', false); log('미션 목표 달성', 'good'); } else if (G.t - G.goalsMetAt > 2.5){ endMission(true); return; } }
   if (G.t >= G.len){ endMission(goalsMet(), goalsMet() ? '' : '시간 안에 목표를 채우지 못했습니다.'); }
@@ -1163,7 +1186,7 @@ function sync3D(time){
 function updateCam(dt){
   if (R.camAnim){ const a = R.camAnim; a.t = Math.min(1, a.t + dt/0.9); const e = a.t<.5 ? 2*a.t*a.t : 1 - Math.pow(-2*a.t+2, 2)/2;
     R.camera.position.lerpVectors(a.from.pos, a.to.pos, e); R.controls.target.lerpVectors(a.from.tgt, a.to.tgt, e); if (a.t >= 1) R.camAnim = null; }
-  if (R.camMode==='follow' && G && G.sel){ const a = byId(G.sel); if (a){ const tgt = new THREE.Vector3(a.pos[0], a.pos[1], a.pos[2]); const d = tgt.clone().sub(R.controls.target).multiplyScalar(Math.min(1, dt*4)); R.controls.target.add(d); R.camera.position.add(d); } }
+  if (!R.camAnim && R.camMode==='follow' && G && G.sel){ const a = byId(G.sel); if (a){ const tgt = new THREE.Vector3(a.pos[0], a.pos[1], a.pos[2]); const d = tgt.clone().sub(R.controls.target).multiplyScalar(Math.min(1, dt*4)); R.controls.target.add(d); R.camera.position.add(d); } }
   R.controls.update();
 }
 
@@ -1241,7 +1264,7 @@ $('#queue').addEventListener('pointerdown', e => {
 });
 function renderBoard(){
   const m = G.m, s = G.stats;
-  $('#goals').innerHTML = Object.entries(m.goals).map(([k,v]) => { const cur = k==='ev' ? s.evOk : s[k]; const done = cur >= v; return `<div class="g ${done?'done':''}"><span>${GOAL_TXT[k]}</span><span class="mono">${Math.min(cur,v)} / ${v}</span><div class="bar"><i style="width:${Math.min(100, cur/v*100)}%"></i></div></div>`; }).join('')
+  if (G.tutorial) $('#goals').innerHTML = `<p class="noone">연습 중입니다. 미션 시작 후 목표(${goalText(m)})를 집계합니다.</p>`; else $('#goals').innerHTML = Object.entries(m.goals).map(([k,v]) => { const cur = k==='ev' ? s.evOk : s[k]; const done = cur >= v; return `<div class="g ${done?'done':''}"><span>${GOAL_TXT[k]}</span><span class="mono">${Math.min(cur,v)} / ${v}</span><div class="bar"><i style="width:${Math.min(100, cur/v*100)}%"></i></div></div>`; }).join('')
     + `<div class="g"><span>위반 허용</span><span class="mono" style="color:${s.viol?'var(--red)':'inherit'}">${s.viol} / ${m.limit}</span></div>`;
   const f = G.flags, closed = f.closed>0 || f.inspect>0, res = fatoReserved(null);
   const fe = $('#s-fato'); fe.textContent = closed ? (f.inspect>0 ? `점검 중 ${Math.ceil(f.inspect)}초` : `폐쇄 ${Math.ceil(f.closed)}초`) : f.fod ? '이물질 발견' : res ? '점유' : '사용 가능'; fe.className = 'v ' + (closed||f.fod ? 'bad' : res ? 'warn' : 'ok');
@@ -1253,7 +1276,7 @@ function renderBoard(){
     const txt = off ? '정비 중' : fire ? '화재' : a ? (a.st==='turn' ? `${a.cs} · ${Math.ceil(a.turn)}초` : a.st==='ready' ? `${a.cs} · 출발 대기` : `${a.cs} · 이동`) : '비어 있음';
     return `<div class="stand ${off?'off':fire?'fire':a?'busy':''}"><b>${st}</b>${txt}</div>`; }).join('');
   // top
-  const left = G.len - G.t; $('#g-clock').textContent = fmt(left); $('#g-clock').classList.toggle('low', left <= 20);
+  const left = G.len - G.t; $('#g-clock').textContent = G.tutorial ? '연습' : fmt(left); $('#g-clock').classList.toggle('low', left <= 20);
   $('#g-score').textContent = Math.round(G.score); $('#g-viol').textContent = `${s.viol}/${m.limit}`; $('#g-viol').classList.toggle('low', s.viol > 0);
   const fl = []; if (f.closed>0) fl.push(['FATO 폐쇄','']); if (f.inspect>0) fl.push(['FATO 점검','warn']); if (f.fod) fl.push(['이물질','warn']);
   if (f.gust>0) fl.push(['돌풍 28kt','']); if (f.drone>0) fl.push(['미확인 드론','']); if (f.sys>0) fl.push(['시스템 장애','warn']);
@@ -1286,6 +1309,7 @@ function computeHint(){
 }
 let COACH = null;
 function renderHint(){
+  if (G.tutorial){ $('#hint').hidden = true; COACH = tutCoach(); applyCoach(); return; }
   const h = (G.briefing || !G.running) ? null : computeHint(), el = $('#hint');
   COACH = h && h[2] ? h[2] : null;
   if (!h){ el.hidden = true; } else { el.hidden = false; el.className = 'hint ' + h[1]; const txt = h[0] + (COACH ? ' <span style="color:var(--amber)">· 깜빡이는 버튼을 누르세요</span>' : ''); if (el.dataset.t !== txt){ el.dataset.t = txt; el.innerHTML = txt; } }
@@ -1303,8 +1327,9 @@ function refreshUI(force){ renderQueue(force); renderBoard(); renderHint(); if (
    FLOW
    ========================================================= */
 function clearScene(){ if (!G) return; G.ac.forEach(a => { if (a.mesh) R.scene.remove(a.mesh); a.label && a.label.remove(); }); G.tr.forEach(t => { R.scene.remove(t.mesh); t.label && t.label.remove(); }); $('#labels').innerHTML = ''; }
-function startMission(m){
-  show('gamebox');
+function startMission(m){ startTutorial(m); }
+function startPlay(m){
+  show('gamebox'); T = null; $('#tcap').hidden = true; $('#tmark').hidden = true;
   if (!initThree()){ $('#view').innerHTML = '<div class="fatal"><h2>3D 화면을 열 수 없습니다</h2><p>이 브라우저에서 WebGL을 쓸 수 없거나 3D 라이브러리를 불러오지 못했습니다. 다른 브라우저에서 열어 보세요.</p></div>'; return; }
   clearScene(); newState(m);
   $('#g-no').textContent = `미션 ${m.id}`; $('#g-title').textContent = m.title;
@@ -1313,9 +1338,10 @@ function startMission(m){
   (m.init||[]).forEach(s => { const a = mkAc('dep'); a.st='turn'; a.stand=s.s; a.turn=s.turn; a.turnMax=Math.max(s.turn, 14); a.pos = W.STAND[s.s].slice(); a.from='도착편'; G.stands[s.s] = a.id; addMesh(a); G.ac.push(a); });
   $('#endbox').hidden = true; $('#pausebox').hidden = true; G.card = null; renderCard();
   setCam(m.cam, true);
-  G.running = true; G.briefing = true;
+  G.running = true; G.briefing = false;
+  log(`미션 ${m.id} 시작 · ${m.title}`, 'sys');
+  flashToast('미션 시작', goalText(m), false);
   refreshUI(true);
-  showBrief(false);
 }
 function showBrief(resume){
   const m = G.m; G.briefing = true;
@@ -1344,11 +1370,11 @@ function showBrief(resume){
   if ($('#bov-menu')) $('#bov-menu').onclick = () => $('#g-quit').click();
   renderHint();
 }
-$('#howbtn').onclick = () => { if (G && G.running && !G.briefing) showBrief(true); };
+$('#howbtn').onclick = () => { if (!G || G.tutorial) return; const b = $('#howbtn'); if (b.dataset.c){ delete b.dataset.c; b.textContent = '연습 다시'; startTutorial(G.m); } else { b.dataset.c = '1'; b.textContent = '한 번 더: 연습 다시'; setTimeout(() => { delete b.dataset.c; b.textContent = '연습 다시'; }, 2500); } };
 $('#g-assist').onchange = e => { if (G){ G.assist = e.target.checked; refreshUI(true); } };
 function togglePause(){ if (!G || !G.running) return; G.paused = !G.paused; $('#pausebox').hidden = !G.paused; $('#g-pause').textContent = G.paused ? '계속' : '일시정지'; }
 $('#g-pause').onclick = togglePause; $('#resume').onclick = togglePause;
-$('#g-quit').onclick = () => { if (G){ G.running = false; clearScene(); } $('#bov').hidden = true; renderMenu(); show('menu'); };
+$('#g-quit').onclick = () => { if (G){ G.running = false; clearScene(); } T = null; $('#tcap').hidden = true; $('#tmark').hidden = true; document.querySelectorAll('.tut-ring').forEach(e => e.classList.remove('tut-ring')); $('#bov').hidden = true; renderMenu(); show('menu'); };
 document.addEventListener('keydown', e => { if (e.code==='Space' && G && G.running && !G.briefing && !$('#gamebox').hidden){ e.preventDefault(); togglePause(); } });
 document.addEventListener('visibilitychange', () => { if (document.hidden && G && G.running && !G.paused && !G.briefing) togglePause(); });
 
@@ -1381,8 +1407,243 @@ function endMission(ok, why){
     </div>`;
   $('#endbox').hidden = false;
   if ($('#e-next')) $('#e-next').onclick = () => { $('#endbox').hidden = true; clearScene(); openBrief(next.id); };
-  $('#e-retry').onclick = () => { $('#endbox').hidden = true; clearScene(); openBrief(m.id); };
+  $('#e-retry').onclick = () => { $('#endbox').hidden = true; clearScene(); startPlay(m); };
   $('#e-menu').onclick = () => { $('#endbox').hidden = true; clearScene(); renderMenu(); show('menu'); };
+}
+
+/* =========================================================
+   INTERACTIVE PRACTICE (in-simulator walkthrough)
+   ========================================================= */
+const FATO_P = () => W.FATO, SEC_P = [-150, 110, 0];
+const csOf = n => { const a = tref(n); return a ? a.cs : ''; };
+const batOf = n => { const a = tref(n); return a ? Math.round(a.bat) : 0; };
+const LAND_STEPS = (n, stand) => [
+  { tgt:{ ac:n }, say:() => `<b>${csOf(n)}</b>가 대기 지점에서 착륙을 요청합니다. 깜빡이는 <b>착륙 허가</b>를 누르세요.`, wait:{ cmd:'land', ref:n } },
+  { cam:'tower', tgt:{ ac:n }, say:'최종접근 경로를 따라 FATO로 내려옵니다.', wait:{ st:'landed', ref:n }, speed:2 },
+  { tgt:{ ac:n }, say:() => `착륙했습니다. <b>스탠드 ${stand}</b>로 보내 FATO를 비우세요.`, wait:{ cmd:'stand'+stand, ref:n } }
+];
+const TUT = {
+  1: [
+    { cam:'near', tgt:{ pos:[0, ROOF, 0] }, say:'여기가 우리가 관제하는 <b>도심 버티포트</b>입니다. 옥상의 <b>FATO</b>(착륙구역)는 한 번에 한 대만 쓸 수 있습니다.', wait:'next' },
+    { tgt:{ ui:'#queue' }, say:'드론이 요청을 보내면 오른쪽 위 <b>요청 · 지시</b> 목록에 쌓입니다. 3D 화면의 드론 이름표에서도 같은 버튼을 누를 수 있습니다.', wait:'next' },
+    { tgt:{ ui:'.board' }, say:'<b>상황판</b>에서 미션 목표와 FATO · 바람 · 스탠드 상태를 확인합니다.', wait:'next' },
+    { enter:T => T.arr('A1', '김포', { bat:70 }), cam:'wide', tgt:{ ac:'A1' }, say:() => `김포 버티포트에서 드론 <b>${csOf('A1')}</b>가 출발해 회랑을 따라 날아옵니다.`, wait:{ st:'holding', ref:'A1' }, speed:3 },
+    { cam:{ focus:'A1' }, tgt:{ ac:'A1' }, say:'대기 지점에서 선회하며 <b>착륙을 요청</b>합니다(노란 고리). 깜빡이는 <b>착륙 허가</b>를 누르세요.', wait:{ cmd:'land', ref:'A1' } },
+    { cam:'tower', tgt:{ pos:FATO_P() }, say:'최종접근 경로를 따라 내려옵니다. FATO 조명이 <b>주황(점유)</b>으로 바뀝니다.', wait:{ st:'landed', ref:'A1' }, speed:2 },
+    { tgt:{ ac:'A1' }, say:() => `착륙한 <b>${csOf('A1')}</b>가 FATO를 막고 있습니다. <b>스탠드 A</b>를 눌러 FATO를 비우세요.`, wait:{ cmd:'standA', ref:'A1' } },
+    { tgt:{ pos:W.STAND.A }, say:'스탠드로 이동해 승객 하기와 충전(턴어라운드)을 시작합니다. FATO가 다시 <b>초록(사용 가능)</b>이 됩니다.', wait:{ st:'turn', ref:'A1' }, speed:2 }
+  ],
+  2: [
+    { enter:T => T.dep('D1', 'A', 4), cam:'tower', tgt:{ ac:'D1' }, say:() => `스탠드 A의 <b>${csOf('D1')}</b>가 턴어라운드(탑승 · 충전) 중입니다. 막대가 다 차면 출발을 요청합니다.`, wait:{ st:'ready', ref:'D1' }, speed:2 },
+    { tgt:{ ac:'D1' }, say:'출발 준비 완료. <b>지상이동</b>을 누르면 스탠드에서 FATO로 이동합니다.', wait:{ cmd:'taxi', ref:'D1' } },
+    { tgt:{ pos:FATO_P() }, say:'FATO로 이동하는 동안에는 다른 드론을 FATO에 들이지 않습니다.', wait:{ st:'lineup', ref:'D1' }, speed:2 },
+    { tgt:{ ac:'D1' }, say:'FATO에 올라섰습니다. <b>이륙 허가</b>를 누르세요.', wait:{ cmd:'takeoff', ref:'D1' } },
+    { cam:{ focus:'D1' }, tgt:{ ac:'D1' }, say:'이륙해 회랑으로 넘어갑니다. 목적지 버티포트까지 날아갑니다.', wait:{ st:'enroute', ref:'D1' }, speed:1.5 }
+  ],
+  3: [
+    { enter:T => { T.arr('A1', '여의도', { hold:true, bat:55 }); T.dep('D1', 'A', 0.05); }, cam:'near', tgt:{ ac:'A1' }, say:() => `공중의 <b>${csOf('A1')}</b>와 스탠드의 <b>${csOf('D1')}</b>가 동시에 요청합니다. FATO는 하나뿐입니다.`, wait:'next' },
+    { tgt:{ ac:'A1' }, say:'공중 드론은 기다리는 동안 배터리를 씁니다. <b>공중 드론 먼저</b> 착륙 허가를 내세요.', wait:{ cmd:'land', ref:'A1' } },
+    { cam:'tower', tgt:{ ac:'D1' }, say:() => `접근 중에는 <b>${csOf('D1')}</b>를 FATO에 올리지 않습니다. 출발기는 스탠드에서 기다립니다.`, wait:{ st:'landed', ref:'A1' }, speed:2 },
+    { tgt:{ ac:'A1' }, say:'착륙했습니다. <b>스탠드 B</b>로 보내 FATO를 비우세요.', wait:{ cmd:'standB', ref:'A1' } },
+    { tgt:{ ac:'D1' }, say:() => `FATO가 비었습니다. 이제 <b>${csOf('D1')}</b> <b>지상이동</b>.`, wait:{ cmd:'taxi', ref:'D1' } },
+    { tgt:{ ac:'D1' }, say:'FATO에 올라서길 기다립니다.', wait:{ st:'lineup', ref:'D1' }, speed:2 },
+    { tgt:{ ac:'D1' }, say:'<b>이륙 허가</b>를 누르세요.', wait:{ cmd:'takeoff', ref:'D1' } }
+  ],
+  4: [
+    { enter:T => { T.arr('A1', '김포', { hold:true, bat:62 }); T.arr('A2', '잠실', { hold:true, bat:24 }); }, cam:'near', tgt:{ ac:'A2' }, say:() => `두 드론이 착륙을 요청합니다. 이름표 아래 막대와 요청 목록의 %가 <b>배터리</b>입니다. <b>${csOf('A2')}</b>는 ${batOf('A2')}%로 낮습니다.`, wait:'next' },
+    { tgt:{ ac:'A2' }, say:() => `배터리가 낮은 <b>${csOf('A2')}</b>부터 <b>착륙 허가</b>를 내세요.`, wait:{ cmd:'land', ref:'A2' } },
+    { cam:'tower', tgt:{ pos:FATO_P() }, say:'배터리 12%가 되면 비상, 0%면 강제 착륙입니다. 낮은 순서로 내리면 막을 수 있습니다.', wait:{ st:'landed', ref:'A2' }, speed:2 },
+    { tgt:{ ac:'A2' }, say:'<b>스탠드 A</b>로 보내세요.', wait:{ cmd:'standA', ref:'A2' } },
+    { cam:'near', tgt:{ ac:'A1' }, say:() => `이제 <b>${csOf('A1')}</b> 차례입니다. <b>착륙 허가</b>.`, wait:{ cmd:'land', ref:'A1' } }
+  ],
+  5: [
+    { enter:T => { T.dep('D1', 'A', 0.05); T.dep('D2', 'B', 999); T.arr('A1', '수서', { hold:true, bat:60 }); }, cam:'tower', tgt:{ pos:W.STAND.C }, say:'이번 미션은 스탠드 C가 정비 중입니다. 스탠드 A · B가 모두 차 있습니다.', wait:'next' },
+    { cam:'near', tgt:{ ac:'A1' }, say:() => `<b>${csOf('A1')}</b>가 착륙을 요청하지만, 지금 내리면 갈 스탠드가 없어 FATO가 막힙니다. 그래서 착륙 허가 버튼에 <b>⚠ 빈 스탠드 없음</b>이 보입니다.`, wait:'next' },
+    { cam:'tower', tgt:{ ac:'D1' }, say:() => `먼저 출발 준비가 끝난 <b>${csOf('D1')}</b>를 내보내 스탠드를 비웁니다. <b>지상이동</b>.`, wait:{ cmd:'taxi', ref:'D1' } },
+    { tgt:{ ac:'D1' }, say:'FATO에 올라서길 기다립니다.', wait:{ st:'lineup', ref:'D1' }, speed:2 },
+    { tgt:{ ac:'D1' }, say:'<b>이륙 허가</b>.', wait:{ cmd:'takeoff', ref:'D1' } },
+    { tgt:{ ac:'D1' }, say:'이륙한 드론이 FATO를 떠나면 스탠드 A가 빈 자리가 됩니다.', wait:{ st:'enroute', ref:'D1' }, speed:2 },
+    ...LAND_STEPS('A1', 'A')
+  ],
+  6: [
+    { enter:T => { T.arr('A1', '김포', { hold:true, bat:60 }); T.transit(0.1); }, cam:'wide', tgt:{ ac:'X1' }, say:'광역 화면입니다. 회색 <b>통과 드론</b>이 김포–잠실 회랑을 따라 우리 최종접근 구역 쪽으로 옵니다. 우리 관할이 아니라 지시할 수 없습니다.', wait:'next' },
+    { tgt:{ pos:SEC_P }, say:'최종접근 구역이 <b>노란색</b>이면 통과 드론이 다가오는 중, <b>빨간색</b>이면 구역 안에 있습니다.', wait:{ fn:() => G.sectorWarn || G.sectorBusy }, speed:3 },
+    { tgt:{ pos:SEC_P }, say:'이때는 착륙 · 이륙 허가를 보류하고 지나가길 기다립니다.', wait:{ fn:() => G.tr.filter(t => t.crossing).every(t => t.passed) }, speed:3 },
+    { cam:'near', tgt:{ ac:'A1' }, say:() => `구역이 다시 초록색입니다. <b>${csOf('A1')}</b> <b>착륙 허가</b>.`, wait:{ cmd:'land', ref:'A1' } },
+    { cam:'tower', tgt:{ ac:'A1' }, say:'접근 중에 구역이 노랗게 바뀌면 그 드론을 <b>복행 · 대기</b>로 돌려보내야 합니다.', wait:{ st:'landed', ref:'A1' }, speed:2 }
+  ],
+  7: [
+    { enter:T => T.arr('A1', '여의도', { hold:true, bat:70 }), cam:'near', tgt:{ ac:'A1' }, say:() => `<b>${csOf('A1')}</b>에게 <b>착륙 허가</b>를 내세요.`, wait:{ cmd:'land', ref:'A1' } },
+    { enter:T => T.event('gust'), tgt:{ ui:'#cardbox' }, say:'돌풍 경보! 오른쪽 위에 <b>상황 카드</b>가 떴습니다. 올바른 조치를 고르세요. 고르는 동안 시간이 멈춥니다.', wait:{ card:true } },
+    { cam:'tower', tgt:{ ac:'A1' }, say:'조치가 실행되어 접근하던 드론이 <b>복행</b>하고 신규 출발이 멈췄습니다. 바람 줄기와 풍향지시기를 보세요.', wait:{ fn:() => G.flags.gust <= 0 }, speed:2 },
+    { cam:'near', tgt:{ ac:'A1' }, say:'경보가 풀렸습니다. 대기 지점에 돌아오면 다시 <b>착륙 허가</b>.', wait:{ cmd:'land', ref:'A1' } }
+  ],
+  8: [
+    { enter:T => T.arr('A1', '잠실', { hold:true, bat:70 }), cam:'tower', tgt:{ pos:FATO_P() }, say:'FATO 위를 잘 보세요.', wait:'next' },
+    { enter:T => T.event('fod'), tgt:{ ui:'#cardbox' }, say:'FATO 위에 비닐 조각(이물질)이 보입니다. <b>상황 카드</b>에서 올바른 조치를 고르세요.', wait:{ card:true } },
+    { tgt:{ pos:FATO_P() }, say:'FATO를 닫고 점검 중입니다(빨간 X). 점검이 끝날 때까지 이착륙하지 않습니다.', wait:{ fn:() => !G.flags.fod && G.flags.inspect <= 0 }, speed:2 },
+    { cam:'near', tgt:{ ac:'A1' }, say:'점검 완료. <b>착륙 허가</b>.', wait:{ cmd:'land', ref:'A1' } }
+  ],
+  9: [
+    { enter:T => { T.arr('A1', '김포', { hold:true, bat:65 }); T.arr('A2', '여의도', { hold:true, bat:50 }); }, cam:'near', tgt:{ ac:'A2' }, say:'두 드론이 대기 중입니다.', wait:'next' },
+    { enter:T => { T.event('mayday'); const e = G.ac.find(a => a.emg); if (e) T.refs.E = e.id; }, tgt:{ ui:'#cardbox' }, say:() => `<b>${csOf('E')}</b>가 MAYDAY를 선언했습니다(빨간 고리). <b>상황 카드</b>에서 올바른 조치를 고르세요.`, wait:{ card:true } },
+    { tgt:{ ac:'E' }, say:'비상기는 모든 것보다 우선합니다. 깜빡이는 <b>착륙 허가</b>.', wait:{ cmd:'land', ref:'E' } },
+    { cam:'tower', tgt:{ pos:FATO_P() }, say:'다른 드론은 대기 지점에서 기다리고, 소방차가 건물 앞에 대기합니다.', wait:{ st:'landed', ref:'E' }, speed:2 },
+    { tgt:{ ac:'E' }, say:'<b>스탠드 A</b>로 보내 FATO를 비우세요.', wait:{ cmd:'standA', ref:'E' } }
+  ],
+  10: [
+    { enter:T => { T.arr('A1', '수서', { hold:true, bat:60 }); T.arr('A2', '여의도', { hold:true, bat:60 }); }, cam:'near', tgt:{ ac:'A1' }, say:'두 드론이 대기 중입니다.', wait:'next' },
+    { enter:T => T.event('nordo'), tgt:{ ui:'#cardbox' }, say:() => `<b>${csOf('A1')}</b>와 교신이 끊겼습니다. <b>상황 카드</b>에서 올바른 조치를 고르세요.`, wait:{ card:true } },
+    { tgt:{ ac:'A1' }, say:'두절 드론은 지시를 받지 못합니다. 이름표에 스스로 접근할 때까지 남은 시간이 보입니다. <b>FATO와 접근 경로를 비워 두세요.</b>', wait:{ st:'approach', ref:'A1' }, speed:2 },
+    { cam:'tower', tgt:{ ac:'A1' }, say:'사전 절차대로 스스로 착륙합니다.', wait:{ st:'landed', ref:'A1' }, speed:2 },
+    { tgt:{ ac:'A1' }, say:'착륙하면 전화로 교신이 복구됩니다. <b>스탠드 A</b>로.', wait:{ cmd:'standA', ref:'A1' } }
+  ],
+  11: [
+    { enter:T => { T.arr('A1', '김포', { hold:true, bat:65 }); T.event('drone'); }, cam:'near', tgt:{ ui:'#cardbox' }, say:'최종접근 경로 근처에 <b>미확인 드론</b>이 탐지됐습니다. <b>상황 카드</b>에서 올바른 조치를 고르세요.', wait:{ card:true } },
+    { tgt:{ pos:[-150, 92, 0] }, say:'빨간 고리가 미확인 드론입니다. 머무는 동안 이착륙하지 않고, 경찰 신고와 위치 기록을 합니다. 무력화는 권한 기관의 일입니다.', wait:{ fn:() => G.flags.drone <= 0 }, speed:2.5 },
+    { tgt:{ ac:'A1' }, say:'드론 이탈이 확인됐습니다. <b>착륙 허가</b>.', wait:{ cmd:'land', ref:'A1' } }
+  ],
+  12: [
+    { enter:T => { T.dep('D1', 'A', 999); T.arr('A1', '잠실', { hold:true, bat:20 }); }, cam:'tower', tgt:{ pos:W.STAND.A }, say:() => `스탠드 A에서 <b>${csOf('D1')}</b>가 충전 중입니다.`, wait:'next' },
+    { enter:T => T.event('fire'), tgt:{ ui:'#cardbox' }, say:'충전 중 <b>배터리 화재</b>! <b>상황 카드</b>에서 올바른 조치를 고르세요.', wait:{ card:true } },
+    { tgt:{ pos:W.STAND.A }, say:'FATO가 20초간 닫힙니다. 화재가 난 스탠드는 남은 시간 동안 쓸 수 없습니다.', wait:'next' },
+    { cam:'near', tgt:{ ac:'A1' }, say:() => `<b>${csOf('A1')}</b>는 배터리가 ${batOf('A1')}%뿐이라 FATO가 열릴 때까지 기다리기 어렵습니다. <b>전환</b>(대체 버티포트)을 누르세요. 이런 상황의 전환은 감점이 없습니다.`, wait:{ cmd:'divert', ref:'A1' } },
+    { cam:'wide', tgt:{ ac:'A1' }, say:'다른 버티포트로 날아갑니다.', wait:'next' }
+  ],
+  13: [
+    { enter:T => { T.arr('A1', '김포', { hold:true, bat:60 }); T.dep('D1', 'B', 0.05); T.event('sys'); }, cam:'near', tgt:{ ui:'#cardbox' }, say:'<b>관리시스템 장애</b>입니다. <b>상황 카드</b>에서 올바른 조치를 고르세요.', wait:{ card:true } },
+    { tgt:{ ui:'#queue' }, say:'배터리 · 대기시간 정보가 <b>--</b>로 바뀌었습니다. 출발은 보류하고 공중 드론부터 처리합니다.', wait:'next' },
+    { tgt:{ ac:'A1' }, say:'공중의 드론부터 <b>착륙 허가</b>.', wait:{ cmd:'land', ref:'A1' } },
+    { cam:'tower', tgt:{ ac:'A1' }, say:'착륙을 기다립니다.', wait:{ st:'landed', ref:'A1' }, speed:2 },
+    { tgt:{ ac:'A1' }, say:'<b>스탠드 A</b>로 보내세요.', wait:{ cmd:'standA', ref:'A1' } },
+    { tgt:{ ac:'D1' }, say:'시스템 장애 중 이륙 허가는 위반입니다. 복구될 때까지 출발기는 기다립니다.', wait:{ fn:() => G.flags.sys <= 0 }, speed:3 },
+    { tgt:{ ac:'D1' }, say:'시스템이 복구됐습니다. <b>지상이동</b>.', wait:{ cmd:'taxi', ref:'D1' } }
+  ],
+  14: [
+    { enter:T => { T.arr('A1', '김포', { hold:true, bat:60 }); T.arr('A2', '여의도', { hold:true, bat:55 }); T.event('gust'); }, cam:'near', tgt:{ ui:'#cardbox' }, say:'돌풍 경보입니다. <b>상황 카드</b>에서 올바른 조치를 고르세요.', wait:{ card:true } },
+    { enter:T => { T.event('mayday'); const e = G.ac.find(a => a.emg); if (e) T.refs.E = e.id; }, tgt:{ ui:'#cardbox' }, say:() => `돌풍 중에 <b>${csOf('E')}</b>가 MAYDAY를 선언했습니다. 다시 올바른 조치를 고르세요.`, wait:{ card:true } },
+    { tgt:{ ac:'E' }, say:'돌풍 중에는 비상기라도 바로 내리지 않습니다. 경보가 풀리는 즉시 최우선으로 내립니다.', wait:{ fn:() => G.flags.gust <= 0 }, speed:2 },
+    { tgt:{ ac:'E' }, say:'경보 해제! 비상기 <b>착륙 허가</b>.', wait:{ cmd:'land', ref:'E' } }
+  ],
+  15: [
+    { cam:'wide', tgt:{ pos:[0, ROOF, 0] }, say:'최종 근무입니다. 광역 화면에서 버티포트 4곳과 회랑, 우리 관할 버티포트를 확인하세요.', wait:'next' },
+    { cam:'near', tgt:{ pos:W.HOLD.N1 }, say:'도착 드론은 대기 지점 N1 · S1에서 선회하며 요청합니다. 최종접근 경로는 서쪽에서 들어옵니다.', wait:'next' },
+    { cam:'tower', tgt:{ pos:FATO_P() }, say:'관제석 시점에서는 FATO와 스탠드를 현장처럼 봅니다.', wait:'next' },
+    { tgt:{ ui:'#queue' }, say:'원칙: <b>공중 우선 · 배터리 낮은 순 · 스탠드 먼저 확보 · 위험 상황 중 이착륙 보류 · 비상기 최우선.</b> 어떤 상황이 올지는 알 수 없습니다.', wait:'next' }
+  ]
+};
+
+let T = null;
+function tref(n){ if (!T || !n) return null; const id = T.refs[n]; return G.ac.find(a => a.id===id) || G.tr.find(t => t.id===id) || null; }
+function tutHelpers(){
+  return {
+    refs:{},
+    arr(n, origin, o){ o = o || {}; const a = spawnArrival(origin); if (o.bat) a.bat = o.bat; if (o.hold){ a.tw = null; a.pos = holdStart(a.hold); enterHold(a); } this.refs[n] = a.id; return a; },
+    dep(n, s, turn){ const a = mkAc('dep'); a.st = 'turn'; a.stand = s; a.turn = turn; a.turnMax = Math.max(turn > 100 ? 14 : turn, 14); a.pos = W.STAND[s].slice(); a.from = '도착편'; G.stands[s] = a.id; addMesh(a); G.ac.push(a); this.refs[n] = a.id; return a; },
+    transit(frac){ spawnTransit(true); const t = G.tr[G.tr.length-1]; t.tw.t = frac * t.tw.dur; stepTween(t, 0); this.refs.X1 = t.id; },
+    event(k){ triggerEvent(k); }
+  };
+}
+function startTutorial(m){
+  show('gamebox');
+  if (!initThree()){ $('#view').innerHTML = '<div class="fatal"><h2>3D 화면을 열 수 없습니다</h2><p>이 브라우저에서 WebGL을 쓸 수 없거나 3D 라이브러리를 불러오지 못했습니다. 다른 브라우저에서 열어 보세요.</p></div>'; return; }
+  clearScene(); newState(m);
+  G.tutorial = true; G.schedule = []; G.assist = true; G.nextSpawn = 1e9; G.nextTransit = 1e9; G.tutSpeed = 1;
+  $('#g-no').textContent = `미션 ${m.id} · 연습`; $('#g-title').textContent = m.title;
+  $('#g-guide').innerHTML = m.guide.map(g => `<li>${g}</li>`).join(''); $('#mguide').open = false;
+  $('#g-assist').checked = true; $('#bov').hidden = true; $('#endbox').hidden = true; $('#pausebox').hidden = true;
+  G.card = null; renderCard();
+  setCam(m.cam, true);
+  G.running = true; G.briefing = false;
+  T = Object.assign(tutHelpers(), { m, steps:(TUT[m.id] || []).concat([{ final:true }]), i:-1, cmdDone:null, advanceAt:null });
+  log(`미션 ${m.id} 연습 시작`, 'sys');
+  nextStep(); refreshUI(true);
+}
+function camFocus(a){
+  if (!a || !R) return;
+  const tgt = new THREE.Vector3(a.pos[0], a.pos[1], a.pos[2]);
+  R.camAnim = { from:{ pos:R.camera.position.clone(), tgt:R.controls.target.clone() }, to:{ pos:tgt.clone().add(new THREE.Vector3(-115, 60, 95)), tgt }, t:0 };
+  G.sel = a.id; R.camMode = 'follow'; document.querySelectorAll('[data-cam]').forEach(b => b.setAttribute('aria-pressed', b.dataset.cam==='follow'));
+}
+function nextStep(){
+  T.i++; T.cmdDone = null; T.advanceAt = null;
+  const st = T.steps[T.i]; if (!st) return;
+  if (st.final){ G.tutSpeed = 1; setCam(T.m.cam); renderTut(); return; }
+  if (st.enter) st.enter(T);
+  if (st.cam){ if (typeof st.cam === 'string') setCam(st.cam); else if (st.cam.focus) camFocus(tref(st.cam.focus)); }
+  G.tutSpeed = st.speed || 1;
+  renderTut(); refreshUI(true);
+}
+function tutCheck(){
+  const st = T && T.steps[T.i]; if (!st || st.final || st.wait === 'next') return;
+  const w = st.wait; let ok = false;
+  if (w.cmd){ const a = tref(w.ref); ok = !!(a && T.cmdDone && T.cmdDone.id === a.id && T.cmdDone.k === w.cmd); }
+  else if (w.st){ const a = tref(w.ref); ok = !!(a && a.st === w.st); }
+  else if (w.card) ok = !!(G.card && G.card.answered);
+  else if (w.fn) ok = !!w.fn();
+  if (ok){ if (T.advanceAt == null) T.advanceAt = G.t + 0.7; else if (G.t >= T.advanceAt) nextStep(); }
+}
+function tutCoach(){
+  const st = T && T.steps[T.i]; const w = st && st.wait;
+  if (!w || !w.cmd) return null; const a = tref(w.ref); return a ? { id:a.id, k:w.cmd } : null;
+}
+function tutAllows(a, k){
+  const c = tutCoach();
+  if (!c || c.id !== a.id || c.k !== k){ flashToast('안내를 따라 주세요', '깜빡이는 버튼을 누르면 다음 단계로 넘어갑니다', false); return false; }
+  const chk = check(a, k); if (chk && chk[1] > 0){ flashToast('잠시 기다리세요', chk[2], false); return false; }
+  return true;
+}
+function goalText(m){ return Object.entries(m.goals).map(([k,v]) => `${GOAL_TXT[k]} ${v}`).join(' · '); }
+function renderTut(){
+  const st = T.steps[T.i], n = T.steps.length - 1, el = $('#tcap');
+  document.querySelectorAll('.tut-ring').forEach(e => e.classList.remove('tut-ring'));
+  let body, btns = '';
+  if (st.final){
+    body = `<b>연습 완료!</b> 실제 미션에서는 드론이 계속 들어오고 시간이 흐릅니다.<br>목표: <b>${goalText(T.m)}</b> · 제한 시간 ${fmt(T.m.min*60)} · 위반 ${T.m.limit+1}회 이상이면 실패`;
+    btns = `<button class="btn primary" id="t-go">미션 시작</button><button class="btn" id="t-again">연습 다시</button>`;
+  } else {
+    body = typeof st.say === 'function' ? st.say(T) : st.say;
+    if (st.wait === 'next') btns = `<button class="btn primary" id="t-next">다음 ▶</button>`;
+    else if (st.wait.cmd) btns = `<span class="t-do">깜빡이는 버튼을 누르세요</span>`;
+    else if (st.wait.card) btns = `<span class="t-do">오른쪽 상황 카드에서 고르세요</span>`;
+    else btns = `<span class="t-do">지켜보세요 · 진행 중${G.tutSpeed > 1 ? ' (빨리 감기 ×'+G.tutSpeed+')' : ''}</span>`;
+    btns += `<button class="btn t-skip" id="t-skip">연습 건너뛰기</button>`;
+    if (st.tgt && st.tgt.ui){ const u = document.querySelector(st.tgt.ui); if (u) u.classList.add('tut-ring'); }
+  }
+  el.innerHTML = `<p class="t-step">연습 ${st.final ? n : T.i+1} / ${n} · 미션 ${T.m.id} ${esc(T.m.title)}</p><p class="t-say">${body}</p><div class="t-btns">${btns}</div>`;
+  el.hidden = false;
+  if ($('#t-next')) $('#t-next').onclick = () => nextStep();
+  if ($('#t-skip')) $('#t-skip').onclick = () => endTutorial();
+  if ($('#t-go')) $('#t-go').onclick = () => endTutorial();
+  if ($('#t-again')) $('#t-again').onclick = () => startTutorial(T.m);
+  posTut();
+}
+function posTut(){
+  const el = $('#tcap'), mk = $('#tmark'); if (!T || el.hidden) { mk.hidden = true; return; }
+  const st = T.steps[T.i]; const vw = R.view.clientWidth, vh = R.view.clientHeight;
+  let p = null;
+  if (st && !st.final && st.tgt){ if (st.tgt.ac){ const a = tref(st.tgt.ac); if (a) p = a.pos; } else if (st.tgt.pos) p = st.tgt.pos; }
+  const bw = el.offsetWidth, bh = el.offsetHeight;
+  if (p){
+    proj.set(p[0], p[1] + 4, p[2]).project(R.camera);
+    if (proj.z < 1){
+      const x = (proj.x+1)/2*vw, y = (1-proj.y)/2*vh;
+      mk.hidden = false; mk.style.transform = `translate(${x}px, ${y}px)`;
+      let left = Math.max(10, Math.min(vw - bw - 10, x - bw/2)), top = y - bh - 108; let below = false;
+      if (top < 52){ top = Math.min(vh - bh - 10, y + 40); below = true; }
+      el.style.left = left + 'px'; el.style.top = top + 'px'; el.classList.toggle('below', below);
+      el.style.setProperty('--ax', Math.max(16, Math.min(bw - 16, x - left)) + 'px');
+      el.classList.add('arrow'); return;
+    }
+  }
+  mk.hidden = true; el.classList.remove('arrow', 'below');
+  if (st && st.tgt && st.tgt.ui){ el.style.left = (vw - bw - 12) + 'px'; el.style.top = '56px'; el.classList.add('toright'); }
+  else { el.classList.remove('toright'); el.style.left = Math.max(10, (vw - bw)/2) + 'px'; el.style.top = '56px'; }
+}
+function endTutorial(){
+  const m = T.m; T = null; $('#tcap').hidden = true; $('#tmark').hidden = true;
+  document.querySelectorAll('.tut-ring').forEach(e => e.classList.remove('tut-ring'));
+  startPlay(m);
 }
 
 /* main loop */
@@ -1390,8 +1651,8 @@ let last = 0, uiAcc = 0, elapsed = 0;
 function frame(ts){
   const dt = Math.min(0.1, (ts - last)/1000 || 0); last = ts; elapsed += dt;
   if (R && G && !$('#gamebox').hidden){
-    if (G.running && !G.paused && !G.briefing){ update(dt); uiAcc += dt; if (uiAcc > 0.2){ uiAcc = 0; renderQueue(false); renderBoard(); renderHint(); } renderLog(); }
-    if (G.ac){ sync3D(elapsed); updateCam(dt); updateLabels(); }
+    if (G.running && !G.paused && !G.briefing){ update(G.tutorial ? (G.card && !G.card.answered ? 0 : dt * (G.tutSpeed || 1)) : dt); uiAcc += dt; if (uiAcc > 0.2){ uiAcc = 0; renderQueue(false); renderBoard(); renderHint(); } renderLog(); }
+    if (G.ac){ sync3D(elapsed); updateCam(dt); updateLabels(); if (T) posTut(); }
     R.renderer.render(R.scene, R.camera);
   }
   requestAnimationFrame(frame);
