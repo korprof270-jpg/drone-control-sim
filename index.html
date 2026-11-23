@@ -323,7 +323,6 @@ table.rec .ok { color: var(--green); font-weight: 700; } table.rec .ng { color: 
           <div class="kv"><span class="label">위반</span><span class="v" id="g-viol">0</span></div>
           <label class="switch"><input type="checkbox" id="g-assist"> 가이드</label>
           <button class="btn" id="g-sound" style="padding:6px 12px" aria-pressed="true">소리 켜짐</button>
-          <button class="btn" id="g-music" style="padding:6px 12px" aria-pressed="true">음악 켜짐</button>
           <button class="btn" id="g-pause" style="padding:6px 12px">일시정지</button>
         </div>
       </div>
@@ -666,8 +665,8 @@ const SFX = (() => {
     play(name){ if (!ensure()) return; try { P[name](ctx.currentTime + 0.01); } catch(e){} },
     incoming(){ const now = performance.now(); if (now - lastIn < 900) return; lastIn = now; this.play('radioIn'); },
     unlock(){ ensure(); },
-    hum(level){ // 로터 소음 배경음: 공중 드론 수에 비례
-      if (!on || !ctx){ return; }
+    hum(level){ // 배경 로터음 제거됨
+      if (!hum) return;
       if (!hum){ const src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true; const fl = ctx.createBiquadFilter(); fl.type = 'bandpass'; fl.frequency.value = 160; fl.Q.value = 0.9; const g = ctx.createGain(); g.gain.value = 0; src.connect(fl); fl.connect(g); g.connect(master); src.start(); hum = g; }
       hum.gain.setTargetAtTime(level, ctx.currentTime, 0.4);
     },
@@ -720,7 +719,7 @@ const MUSIC = (() => {
     }
   }
   return {
-    intensity(v){ want = on ? v : 0; if (!on) return; if (!setup()) return; if (!timer) timer = setInterval(schedule, 250); },
+    intensity(v){ return; want = on ? v : 0; if (!on) return; if (!setup()) return; if (!timer) timer = setInterval(schedule, 250); },
     get on(){ return on; },
     set(v){ on = v; lsSet('vtp3d-music', v); if (!v && gain && SFX.ctx) gain.gain.setTargetAtTime(0, SFX.ctx.currentTime, 0.3); }
   };
@@ -2021,9 +2020,6 @@ $('#howbtn').onclick = () => { if (!G || G.tutorial) return; const b = $('#howbt
 function renderSoundBtn(){ const b = $('#g-sound'); b.textContent = SFX.on ? '소리 켜짐' : '소리 꺼짐'; b.setAttribute('aria-pressed', SFX.on); }
 $('#g-sound').onclick = () => { SFX.set(!SFX.on); if (SFX.on){ SFX.unlock(); SFX.play('tick'); } renderSoundBtn(); };
 renderSoundBtn();
-function renderMusicBtn(){ const b = $('#g-music'); b.textContent = MUSIC.on ? '음악 켜짐' : '음악 꺼짐'; b.setAttribute('aria-pressed', MUSIC.on); }
-$('#g-music').onclick = () => { MUSIC.set(!MUSIC.on); if (MUSIC.on) SFX.unlock(); renderMusicBtn(); };
-renderMusicBtn();
 $('#g-assist').onchange = e => { if (G){ G.assist = e.target.checked; refreshUI(true); } };
 function stopAmbience(){ ['wind','fire','buzz','static','alarmLoop','rain','birds'].forEach(n => SFX.loop(n, false)); MUSIC.intensity(0); ['#fx-gust','#fx-alert','#fx-amber','#fx-glitch','#hzb'].forEach(q => $(q).hidden = true); }
 function togglePause(){ if (!G || !G.running) return; G.paused = !G.paused; if (G.paused){ SFX.hum(0); renderFx(); } $('#pausebox').hidden = !G.paused; $('#g-pause').textContent = G.paused ? '계속' : '일시정지'; }
