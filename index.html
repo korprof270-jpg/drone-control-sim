@@ -238,6 +238,25 @@ table.rec th { text-align: left; color: var(--muted); font-weight: 700; font-siz
 table.rec td { padding: 7px 8px; border-bottom: 1px solid #1B3049; font-variant-numeric: tabular-nums; }
 table.rec tr.me td { background: rgba(242,169,59,.08); }
 table.rec .ok { color: var(--green); font-weight: 700; } table.rec .ng { color: var(--red); }
+
+/* incident overlays */
+.fx { position: absolute; inset: 0; pointer-events: none; z-index: 2; }
+.fx-gust { background: repeating-linear-gradient(97deg, rgba(225,238,250,0) 0 46px, rgba(225,238,250,.13) 46px 48px, rgba(225,238,250,0) 48px 90px); background-size: 260px 100%; animation: gustmv .45s linear infinite; }
+@keyframes gustmv { from { background-position: 0 0; } to { background-position: 260px 0; } }
+.fx-alert { box-shadow: inset 0 0 140px 40px rgba(239,80,60,.55); animation: vign 1s ease-in-out infinite; }
+.fx-amber { box-shadow: inset 0 0 120px 30px rgba(242,169,59,.45); animation: vign 1.5s ease-in-out infinite; }
+@keyframes vign { 0%,100% { opacity: .45; } 50% { opacity: 1; } }
+.fx-glitch { background: repeating-linear-gradient(0deg, rgba(0,0,0,.22) 0 2px, rgba(0,0,0,0) 2px 4px); animation: flick .18s steps(2) infinite; }
+.fx-glitch::after { content: "SYSTEM ERROR"; position: absolute; right: 14px; bottom: 44px; font: 700 13px var(--mono); color: #FF8A7A; letter-spacing: .2em; }
+@keyframes flick { 0% { opacity: .55; transform: translateX(0); } 50% { opacity: .9; transform: translateX(2px); } 100% { opacity: .6; transform: translateX(-1px); } }
+.hzb { position: absolute; left: 50%; top: 52px; transform: translateX(-50%); display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; pointer-events: none; z-index: 3; max-width: calc(100% - 20px); }
+.hz { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 10px; font-weight: 700; font-size: 14px; background: rgba(58,20,20,.92); border: 2px solid var(--red); color: #FFE1DA; animation: hzp 1s ease-in-out infinite; }
+.hz.amber { background: rgba(58,44,18,.92); border-color: var(--amber); color: #FFE9C4; }
+.hz.blue { background: rgba(20,40,70,.92); border-color: #5AA6EE; color: #DCEBFF; }
+.hz i { width: 10px; height: 10px; border-radius: 50%; background: currentColor; font-style: normal; }
+.hz .s { font-family: var(--mono); font-weight: 500; opacity: .9; }
+@keyframes hzp { 0%,100% { box-shadow: 0 0 0 0 rgba(239,106,85,.0); } 50% { box-shadow: 0 0 18px 2px rgba(239,106,85,.45); } }
+@media (prefers-reduced-motion: reduce) { .fx-gust, .fx-alert, .fx-amber, .fx-glitch, .hz { animation: none; } }
 @keyframes pop { from { transform: scale(.97); opacity: .4; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .card { animation: none; } .mcard { transition: none; } }
 @media (max-width: 1080px) { .game { grid-template-columns: minmax(0, 1fr); } .view { height: 58vh; min-height: 340px; } .brief { grid-template-columns: minmax(0, 1fr); } }
@@ -302,6 +321,7 @@ table.rec .ok { color: var(--green); font-weight: 700; } table.rec .ng { color: 
           <div class="kv"><span class="label">위반</span><span class="v" id="g-viol">0</span></div>
           <label class="switch"><input type="checkbox" id="g-assist"> 가이드</label>
           <button class="btn" id="g-sound" style="padding:6px 12px" aria-pressed="true">소리 켜짐</button>
+          <button class="btn" id="g-music" style="padding:6px 12px" aria-pressed="true">음악 켜짐</button>
           <button class="btn" id="g-pause" style="padding:6px 12px">일시정지</button>
         </div>
       </div>
@@ -313,6 +333,8 @@ table.rec .ok { color: var(--green); font-weight: 700; } table.rec .ng { color: 
             <div class="vtools"><button class="btn" data-cam="wide">광역</button><button class="btn" data-cam="near">버티포트</button><button class="btn" data-cam="tower">관제석</button><button class="btn" data-cam="follow">선택 기체 추적</button><button class="btn" id="hudbtn" aria-pressed="true">HUD</button><button class="btn" id="howbtn">연습 다시</button></div>
             <div class="flags" id="flags"></div>
             <div class="legend"><i style="background:#F2A93B"></i>도착<i style="background:#5AA6EE"></i>출발<i style="background:#EF6A55"></i>비상<i style="background:#8E9AA8"></i>통과 · 두절</div>
+            <div class="fx fx-gust" id="fx-gust" hidden></div><div class="fx fx-alert" id="fx-alert" hidden></div><div class="fx fx-amber" id="fx-amber" hidden></div><div class="fx fx-glitch" id="fx-glitch" hidden></div>
+            <div class="hzb" id="hzb" hidden></div>
             <div class="toast" id="toast" hidden></div>
             <div class="bov" id="bov" hidden></div>
             <div class="tmark" id="tmark" hidden></div>
@@ -461,13 +483,13 @@ MISSIONS.forEach(m => { if (SURPRISE[m.id] || m.events === 'random') m.surprise 
 /* 테스트 단계: 15단계 버티포트로 10분, 1분마다 난이도 상승 (9분 무렵이 고비) */
 const TEST_LEVELS = [ // [도착 간격(초), 공중 동시 최대, 배터리 최소, 배터리 최대, 통과 교통 간격(초)]
   [13, 3, 55, 78, 0], [11, 3, 52, 74, 34], [10, 4, 48, 70, 30], [9, 4, 45, 66, 27], [8.5, 5, 44, 64, 24],
-  [7.5, 5, 41, 61, 22], [6.8, 5, 39, 58, 19], [6, 6, 36, 55, 17], [5, 7, 31, 49, 15], [4.4, 8, 27, 43, 13] ];
+  [7.5, 5, 41, 61, 22], [6.8, 5, 39, 58, 19], [6, 6, 36, 55, 17], [4.8, 7, 30, 47, 14], [4.1, 8, 25, 40, 12] ];
 const TEST_EVENTS = [70, 140, 200, 250, 295, 335, 370, 400, 428, 452, 474, 494, 512, 528, 543, 557, 570, 582, 593];
 const TEST_M = { id:16, tier:4, test:true, title:'테스트 단계', skill:'종합 평가 · 10분', min:10, cam:'wide', assist:false,
-  fatos:['F1','F2'], cap:'ABCDEF'.split(''), stands:'ABCDEF'.split(''), goals:{}, limit:5,
+  fatos:['F1','F2'], cap:'ABCDE'.split(''), stands:'ABCDE'.split(''), goals:{}, limit:5,
   init:[{s:'A',turn:10},{s:'B',turn:20},{s:'C',turn:30}], script:[{t:3,o:'김포'},{t:7,o:'잠실'}],
   spawn:{ every:13, max:3, bat:[55,78] }, transit:true, events:[],
-  story:'15단계와 같은 버티포트(FATO 2개 · 스탠드 6개)를 10분 동안 운영합니다. 1분마다 난이도가 오르고, 9분 무렵이 가장 어렵습니다.',
+  story:'FATO 2개 · 스탠드 5개 버티포트를 10분 동안 운영합니다. 1분마다 난이도가 오르고, 9분 무렵이 가장 어렵습니다.',
   guide:['10분을 버티면 통과입니다. 위반 6회 이상 또는 강제 착륙 1회면 그 시점에 종료됩니다.', '1분마다 난이도가 오릅니다: 드론이 더 자주, 배터리가 더 적은 채로 들어오고 돌발 상황도 잦아집니다.', '배터리가 낮은 드론은 늦기 전에 내리거나 전환하세요. 공중 드론이 쌓이면 강제 착륙으로 끝납니다.', '공중 우선 · 배터리 낮은 순 · 스탠드 먼저 확보 · 위험 상황 중 이착륙 보류 · 비상기 최우선.'],
   tip:'버틴 시간과 점수가 기록됩니다.' };
 const testLevel = t => Math.min(10, Math.floor(t / 60) + 1);
@@ -546,6 +568,21 @@ const stars = n => [1,2,3].map(i => i<=n ? '★' : '<span class="off">★</span>
 const SFX = (() => {
   let ctx = null, master = null, noiseBuf = null, hum = null, lastIn = 0;
   let on = lsGet('vtp3d-sound', true);
+  const loops = {};
+  function makeLoop(name){
+    const g = ctx.createGain(); g.gain.value = 0; g.connect(master);
+    const src = () => { const n = ctx.createBufferSource(); n.buffer = noiseBuf; n.loop = true; n.start(); return n; };
+    const lfo = (freq, depth, target) => { const o = ctx.createOscillator(), d = ctx.createGain(); o.frequency.value = freq; d.gain.value = depth; o.connect(d); d.connect(target); o.start(); };
+    if (name === 'wind'){ const n = src(), bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 450; bp.Q.value = 0.6; lfo(0.23, 260, bp.frequency); const am = ctx.createGain(); am.gain.value = 0.75; lfo(0.37, 0.35, am.gain); n.connect(bp); bp.connect(am); am.connect(g); return { g, vol:0.34 }; }
+    if (name === 'fire'){ const n = src(), lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 220; n.connect(lp); lp.connect(g);
+      const n2 = src(), hp = ctx.createBiquadFilter(); hp.type = 'bandpass'; hp.frequency.value = 3200; hp.Q.value = 1.5; const cr = ctx.createGain(); cr.gain.value = 0; n2.connect(hp); hp.connect(cr); cr.connect(g);
+      setInterval(() => { if (g.gain.value < 0.01) return; const t = ctx.currentTime; for (let i=0;i<5;i++){ const tt = t + Math.random()*0.25; cr.gain.setValueAtTime(0.9, tt); cr.gain.exponentialRampToValueAtTime(0.0001, tt + 0.03); } }, 250);
+      return { g, vol:0.3 }; }
+    if (name === 'buzz'){ [205, 208.5, 412].forEach((fr, i) => { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = fr; const og = ctx.createGain(); og.gain.value = i === 2 ? 0.3 : 0.5; lfo(2.1 + i, 6, o.frequency); o.connect(og); og.connect(g); o.start(); }); const lp = ctx.createBiquadFilter(); return { g, vol:0.05 }; }
+    if (name === 'static'){ const n = src(), bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2400; bp.Q.value = 0.7; const am = ctx.createGain(); am.gain.value = 0.5; const sq = ctx.createOscillator(); sq.type = 'square'; sq.frequency.value = 5.5; const sd = ctx.createGain(); sd.gain.value = 0.5; sq.connect(sd); sd.connect(am.gain); sq.start(); n.connect(bp); bp.connect(am); am.connect(g); return { g, vol:0.09 }; }
+    if (name === 'alarmLoop'){ const o = ctx.createOscillator(); o.type = 'square'; o.frequency.value = 880; const am = ctx.createGain(); am.gain.value = 0; const sq = ctx.createOscillator(); sq.type = 'square'; sq.frequency.value = 1.6; const sd = ctx.createGain(); sd.gain.value = 0.5; sq.connect(sd); sd.connect(am.gain); const off = ctx.createConstantSource ? ctx.createConstantSource() : null; if (off){ off.offset.value = 0.5; off.connect(am.gain); off.start(); } o.connect(am); am.connect(g); o.start(); sq.start(); return { g, vol:0.035 }; }
+    return { g, vol:0 };
+  }
   function ensure(){
     if (!on) return null;
     if (!ctx){
@@ -576,6 +613,13 @@ const SFX = (() => {
     win(t){ [523, 659, 784, 1046].forEach((f,i) => tone(t + i*0.13, f, i===3 ? 0.5 : 0.16, 'triangle', 0.18)); },
     lose(t){ [392, 330, 262].forEach((f,i) => tone(t + i*0.22, f, i===2 ? 0.6 : 0.22, 'triangle', 0.16)); },
     tick(t){ tone(t, 1200, 0.05, 'sine', 0.12); },
+    gustHit(t){ noise(t + 0.9, 1.8, 0.32, 'bandpass', 250, 0.6, 1400, 0.4); noise(t + 1.2, 1.4, 0.18, 'lowpass', 500, 0.7, 180, 0.3); },
+    fodChime(t){ [0, 0.32].forEach(d => { tone(t + 1.0 + d, 1760, 0.5, 'triangle', 0.14); tone(t + 1.0 + d, 2637, 0.4, 'sine', 0.07); }); },
+    mayday(t){ for (let i=0;i<3;i++){ tone(t + 1.0 + i*0.5, 620, 0.5, 'sawtooth', 0.12, 1250); } },
+    droneWhine(t){ tone(t + 1.0, 820, 1.4, 'sawtooth', 0.08, 1500); tone(t + 1.0, 826, 1.4, 'sawtooth', 0.07, 1510); },
+    staticBurst(t){ noise(t + 1.0, 0.7, 0.22, 'bandpass', 2600, 0.6); noise(t + 1.8, 0.4, 0.16, 'bandpass', 3200, 0.8); },
+    fireBell(t){ for (let i=0;i<14;i++) tone(t + 1.0 + i*0.075, 2100, 0.07, 'square', 0.06); noise(t + 1.0, 1.2, 0.12, 'highpass', 2500, 0.7); },
+    glitch(t){ for (let i=0;i<9;i++) tone(t + 1.0 + i*0.07, 300 + Math.random()*1600, 0.05, 'square', 0.07); },
     levelup(t){ [660, 880, 1175].forEach((f,i) => tone(t + i*0.11, f, 0.14, 'square', 0.09)); }
   };
   return {
@@ -587,11 +631,60 @@ const SFX = (() => {
       if (!hum){ const src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true; const fl = ctx.createBiquadFilter(); fl.type = 'bandpass'; fl.frequency.value = 160; fl.Q.value = 0.9; const g = ctx.createGain(); g.gain.value = 0; src.connect(fl); fl.connect(g); g.connect(master); src.start(); hum = g; }
       hum.gain.setTargetAtTime(level, ctx.currentTime, 0.4);
     },
+    loop(name, want){
+      if (!want && !loops[name]) return;
+      if (!ensure()) return;
+      if (!loops[name]){ try { loops[name] = makeLoop(name); } catch(e){ return; } }
+      const L = loops[name]; L.g.gain.setTargetAtTime(want ? L.vol : 0, ctx.currentTime, want ? 0.25 : 0.4);
+    },
+    get ctx(){ return ensure(); }, get master(){ return master; }, get noiseBuf(){ return noiseBuf; },
     get on(){ return on; },
     set(v){ on = v; lsSet('vtp3d-sound', v); if (ctx){ if (v) ctx.resume().catch(() => {}); else ctx.suspend().catch(() => {}); } }
   };
 })();
 document.addEventListener('pointerdown', () => SFX.unlock(), { once:true });
+
+/* background music: generative ambient score, intensity follows the situation */
+const MUSIC = (() => {
+  let on = lsGet('vtp3d-music', true), gain = null, filt = null, timer = null, nextBar = 0, bar = 0, level = 0, want = 0;
+  const BPM = 84, BEAT = 60 / BPM, BARLEN = BEAT * 4;
+  const CH = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62], [57, 60, 64], [53, 57, 60], [52, 55, 59], [55, 59, 62]]; // Am F C G Am F Em G
+  const hz = n => 440 * Math.pow(2, (n - 69) / 12);
+  function setup(){
+    const ctx = SFX.ctx; if (!ctx || gain) return ctx;
+    gain = ctx.createGain(); gain.gain.value = 0; filt = ctx.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = 900; filt.Q.value = 0.4;
+    filt.connect(gain); gain.connect(SFX.master); return ctx;
+  }
+  function note(ctx, t, freq, dur, type, vol, dest, att){
+    const o = ctx.createOscillator(), g = ctx.createGain(); o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + (att || 0.02)); g.gain.setValueAtTime(vol, t + dur*0.7); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(dest || filt); o.start(t); o.stop(t + dur + 0.05);
+  }
+  function hat(ctx, t, vol){ const n = ctx.createBufferSource(); n.buffer = SFX.noiseBuf; const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 7000; const g = ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05); n.connect(hp); hp.connect(g); g.connect(gain); n.start(t); n.stop(t + 0.06); }
+  function kick(ctx, t, vol){ const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.setValueAtTime(120, t); o.frequency.exponentialRampToValueAtTime(45, t + 0.18); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25); o.connect(g); g.connect(gain); o.start(t); o.stop(t + 0.3); }
+  function schedule(){
+    const ctx = SFX.ctx; if (!ctx || !on) return;
+    level += (want - level) * 0.25;
+    gain.gain.setTargetAtTime(want > 0 ? 0.11 + level*0.05 : 0, ctx.currentTime, 0.8);
+    filt.frequency.setTargetAtTime(700 + level*2600, ctx.currentTime, 1.0);
+    if (want <= 0) return;
+    if (nextBar < ctx.currentTime) nextBar = ctx.currentTime + 0.1;
+    while (nextBar < ctx.currentTime + 1.2){
+      const t = nextBar, chord = CH[bar % CH.length];
+      chord.forEach(n => { note(ctx, t, hz(n), BARLEN + 0.3, 'sawtooth', 0.045, null, 0.6); note(ctx, t, hz(n) * 1.004, BARLEN + 0.3, 'sawtooth', 0.035, null, 0.6); });
+      note(ctx, t, hz(chord[0] - 24), BARLEN * 0.95, 'sine', 0.22, gain, 0.05);
+      if (level > 0.35){ const arp = [0, 1, 2, 1, 0, 2, 1, 2]; arp.forEach((k, i) => note(ctx, t + i*BEAT/2, hz(chord[k] + 12), 0.22, 'triangle', 0.05 + level*0.03, gain, 0.005)); }
+      if (level > 0.55){ for (let i=0;i<8;i++) hat(ctx, t + i*BEAT/2, i % 2 ? 0.05 : 0.09); }
+      if (level > 0.7){ for (let i=0;i<4;i++) kick(ctx, t + i*BEAT, 0.35); }
+      nextBar += BARLEN; bar++;
+    }
+  }
+  return {
+    intensity(v){ want = on ? v : 0; if (!on) return; if (!setup()) return; if (!timer) timer = setInterval(schedule, 250); },
+    get on(){ return on; },
+    set(v){ on = v; lsSet('vtp3d-music', v); if (!v && gain && SFX.ctx) gain.gain.setTargetAtTime(0, SFX.ctx.currentTime, 0.3); }
+  };
+})();
 
 /* =========================================================
    MENU & BRIEFING
@@ -927,7 +1020,28 @@ function buildWorld(){
   O.fireLight = new THREE.PointLight(0xFF7A3D, 3, 140, 2); O.fireLight.position.y = 10; O.fire.add(O.fireLight);
   O.fire.visible = false; S.add(O.fire);
   O.gust = new THREE.Group(); const gm = new THREE.MeshBasicMaterial({ color:0xE6F0FA, transparent:true, opacity:0.22, depthWrite:false }); for (let i=0;i<22;i++){ const g = new THREE.Mesh(new THREE.BoxGeometry(40, 0.25, 0.25), gm); g.position.set(rnd(-240,120), rnd(ROOF+6, 130), rnd(-110,110)); O.gust.add(g); } O.gust.visible = false; S.add(O.gust);
-  O.drone = makeCraft('rogue'); const dr = new THREE.Mesh(new THREE.RingGeometry(14, 15.5, 40), new THREE.MeshBasicMaterial({ color:0xEF6A55, side:THREE.DoubleSide, transparent:true, opacity:0.75, fog:false })); dr.rotation.x = -Math.PI/2; O.drone.add(dr); O.droneRing = dr; O.drone.visible = false; S.add(O.drone);
+  // gust particles: fast streaks + dust
+  { const N = 1600, pos = new Float32Array(N*3); for (let i=0;i<N;i++){ pos[i*3] = rnd(-420, 320); pos[i*3+1] = rnd(ROOF+2, 190); pos[i*3+2] = rnd(-260, 260); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    O.dust = new THREE.Points(g, new THREE.PointsMaterial({ color:0xE8EEF4, size:1.6, transparent:true, opacity:0.6, depthWrite:false })); O.dust.visible = false; S.add(O.dust);
+    const M = 520, lp = new Float32Array(M*6); for (let i=0;i<M;i++){ const x = rnd(-420, 320), y = rnd(ROOF+2, 180), z = rnd(-260, 260), L = rnd(10, 26); lp.set([x, y, z, x+L, y-0.6, z+rnd(-1,1)], i*6); }
+    const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.BufferAttribute(lp, 3));
+    O.streaks = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color:0xF2F7FC, transparent:true, opacity:0.45, depthWrite:false })); O.streaks.visible = false; S.add(O.streaks); }
+  // fire embers
+  { const N = 220, pos = new Float32Array(N*3); for (let i=0;i<N;i++){ pos[i*3] = rnd(-6,6); pos[i*3+1] = rnd(0, 60); pos[i*3+2] = rnd(-6,6); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    O.embers = new THREE.Points(g, new THREE.PointsMaterial({ color:0xFFB050, size:1.4, transparent:true, opacity:0.95, blending:THREE.AdditiveBlending, depthWrite:false })); O.fire.add(O.embers);
+    O.fireBeacon = glow(glowMat(0xFF2A1A, 1), 26); O.fireBeacon.position.set(0, 22, 0); O.fire.add(O.fireBeacon); }
+  // FOD warning: pulsing red ring + amber corner beacons
+  O.fodRing = new THREE.Mesh(new THREE.RingGeometry(30, 33, 64), new THREE.MeshBasicMaterial({ color:0xFF3A2A, transparent:true, opacity:0.8, side:THREE.DoubleSide, depthWrite:false, fog:false })); O.fodRing.rotation.x = -Math.PI/2; O.fodRing.visible = false; S.add(O.fodRing);
+  O.fodBeacons = [0,1,2,3].map(i => { const b = glow(glowMat(0xFFB020, 1), 9); b.visible = false; S.add(b); return b; });
+  // closed FATO: big red X per FATO
+  O.xMarks = {}; Object.entries(W.FATOS).forEach(([fid, p]) => { const gx = new THREE.Group(); const mm = new THREE.MeshBasicMaterial({ color:0xFF3A2A, transparent:true, opacity:0.85, depthWrite:false });
+    [Math.PI/4, -Math.PI/4].forEach(r => { const bar = new THREE.Mesh(new THREE.PlaneGeometry(64, 5), mm); bar.rotation.x = -Math.PI/2; bar.rotation.z = r; bar.position.y = ROOF + 0.35; gx.add(bar); });
+    gx.position.set(p[0], 0, p[2]); gx.visible = false; S.add(gx); O.xMarks[fid] = gx; });
+  // rogue drone beam
+  O.droneBeam = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 6, 1, 16, 1, true), new THREE.MeshBasicMaterial({ color:0xFF3A2A, transparent:true, opacity:0.22, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide })); O.droneBeam.visible = false; S.add(O.droneBeam);
+  O.drone = makeCraft('rogue'); const dr = new THREE.Mesh(new THREE.RingGeometry(14, 15.5, 40), new THREE.MeshBasicMaterial({ color:0xEF6A55, side:THREE.DoubleSide, transparent:true, opacity:0.75, fog:false })); dr.rotation.x = -Math.PI/2; O.drone.add(dr); O.droneRing = dr; const dl = textSprite('미확인 드론', '#FF8A7A', 10, 0.026); dl.position.set(0, 8, 0); O.drone.add(dl); O.drone.visible = false; S.add(O.drone);
   // rescue vehicle at ground
   O.truck = new THREE.Group(); const tb = new THREE.Mesh(new THREE.BoxGeometry(10, 3.4, 3.2), std(0xB8231B, 0.4, 0.3)); tb.position.y = 2.2; tb.castShadow = true; O.truck.add(tb);
   const cab = new THREE.Mesh(new THREE.BoxGeometry(3, 2.6, 3.1), std(0xD8DCE0, 0.2, 0.4)); cab.position.set(-6, 1.8, 0); O.truck.add(cab);
@@ -982,8 +1096,9 @@ function makeCraft(kind){
   const strobe = glow(K.white_g, 3.5); strobe.position.set(0, kind==='rogue' ? 0.8 : 1.45, 0); g.add(strobe);
   let status = null;
   if (kind!=='rogue'){ status = std(0xF2A93B, 0.3, 0, { emissive:0xF2A93B, emissiveIntensity:1.4 }); add(K.status, status, 0, -1.05, 0, Math.PI/2); }
-  g.userData = { rotors, strobe, status };
-  const s = kind==='rogue' ? 2.0 : kind==='transit' ? 1.35 : 1.55; g.scale.set(s, s, s);
+  const halo = glow(glowMat(0xFF3A2A, 0.85), 34); halo.visible = false; g.add(halo);
+  g.userData = { rotors, strobe, status, halo };
+  const s = kind==='rogue' ? 3.4 : kind==='transit' ? 1.35 : 1.55; g.scale.set(s, s, s);
   return g;
 }
 
@@ -1268,7 +1383,7 @@ function triggerEvent(k){
   ev.start(); G.stats.evTot++;
   const perm = ev.opts.map((_,i)=>i).sort(() => Math.random()-.5);
   G.card = { ev, perm, deadline:G.t + 20, answered:false, pick:null, hideAt:0 };
-  log(`상황 발생: ${ev.title}`, ev.sev==='bad' ? 'bad' : 'sys'); SFX.play('alarm');
+  log(`상황 발생: ${ev.title}`, ev.sev==='bad' ? 'bad' : 'sys'); SFX.play('alarm'); SFX.play({ gust:'gustHit', fod:'fodChime', mayday:'mayday', drone:'droneWhine', nordo:'staticBurst', fire:'fireBell', sys:'glitch' }[k] || 'tick');
   flashToast('상황 발생', ev.title, ev.sev==='bad');
   renderCard();
 }
@@ -1371,6 +1486,8 @@ function sync3D(time){
     ud.status.color.setHex(c); ud.status.emissive.setHex(c); ud.status.emissiveIntensity = a.emg ? (Math.sin(time*8) > 0 ? 2.8 : 0.2) : (G.sel===a.id ? 2.8 : 1.3);
     const spin = ['turn','deboard','ready'].includes(a.st) ? 0 : 0.9; ud.rotors.forEach((r,i) => r.rotation.y += spin * (i%2 ? 1 : -1));
     ud.strobe.visible = blink(a.id);
+    if (ud.halo){ const hv = a.emg || a.nordo; ud.halo.visible = hv; if (hv){ ud.halo.material.color.setHex(a.emg ? 0xFF3A2A : 0xFFC040); const k = 26 + Math.sin(time*(a.emg ? 9 : 5))*8; ud.halo.scale.set(k, k, 1); } }
+    if (f.gust > 0 && AIR.concat(['approach']).includes(a.st)){ a.mesh.rotation.z = Math.sin(time*7 + a.id)*0.2; a.mesh.position.y += Math.sin(time*5.3 + a.id)*1.4; } else a.mesh.rotation.z = 0;
     const moving = !!a.tw && AIR.concat(['enroute','takeoff']).includes(a.st); a.mesh.rotation.x = moving ? -0.06 : 0;
   });
   G.tr.forEach(t => { t.mesh.position.set(...t.pos); t.mesh.rotation.y = t.heading + Math.PI; t.mesh.rotation.x = -0.06; const ud = t.mesh.userData; ud.rotors.forEach((r,i) => r.rotation.y += 0.9*(i%2?1:-1)); ud.strobe.visible = blink(t.id); ud.status.color.setHex(0x8E9AA8); ud.status.emissive.setHex(0x8E9AA8); });
@@ -1381,18 +1498,27 @@ function sync3D(time){
   Object.keys(O.stands).forEach(s => { const st = O.stands[s]; const built = G.m.cap.includes(s); const off = built && !G.m.stands.includes(s); const occ = G.stands[s] && byId(G.stands[s]);
     st.cover.visible = !built; st.fut.visible = !built; st.charger.visible = built; st.screen.visible = built;
     st.mat.color.setHex(G.fire[s] ? 0xEF6A55 : off ? 0x56687E : occ ? 0x5AA6EE : 0x4CC38A); st.mat.opacity = !built ? 0 : off ? 0.3 : 0.13; st.off.visible = off;
-    st.screen.material.color.setHex(G.fire[s] ? 0xFF3A2A : occ && occ.st==='turn' ? 0x4CC38A : 0x4FA3FF); });
+    st.screen.material.color.setHex(f.sys > 0 ? (Math.sin(time*23 + s.charCodeAt(0)) > 0 ? 0xFF3030 : 0x101418) : G.fire[s] ? 0xFF3A2A : occ && occ.st==='turn' ? 0x4CC38A : 0x4FA3FF); });
   const showSec = !!G.m.transit && R.hud; [O.sector, O.sectorEdge, O.transitLine, O.transitLabel].forEach(o => o.visible = showSec);
   const sc = G.sectorBusy ? 0xEF6A55 : G.sectorWarn ? 0xF2A93B : 0x4CC38A;
   O.sectorMat.color.setHex(sc); O.sectorMat.opacity = G.sectorBusy ? 0.15 : G.sectorWarn ? 0.1 : 0.035; O.sectorEdge.material.color.setHex(sc);
   Object.entries(O.finals).forEach(([fid, L]) => { L.visible = R.hud && G.m.fatos.includes(fid); L.material.color.setHex(fatoClosed(fid) || hazardNow(fid) || G.sectorBusy ? 0xEF6A55 : G.sectorWarn ? 0xF2A93B : 0x4CC38A); });
   O.fod.visible = !!f.fod; if (f.fodF){ const P = W.FATOS[f.fodF]; O.fod.position.set(P[0], 0, P[2]); }
   O.gust.visible = f.gust > 0; if (O.gust.visible) O.gust.children.forEach((g,i) => { g.position.x += 4 + (i%3); if (g.position.x > 170) g.position.x = -230; });
+  O.dust.visible = O.streaks.visible = f.gust > 0;
+  if (f.gust > 0){ const dp = O.dust.geometry.attributes.position; for (let i=0;i<dp.count;i++){ let x = dp.getX(i) + 5.5 + (i%5); if (x > 320) x = -420; dp.setX(i, x); dp.setY(i, dp.getY(i) + Math.sin(time*3 + i)*0.25); } dp.needsUpdate = true;
+    const sp = O.streaks.geometry.attributes.position; for (let i=0;i<sp.count;i+=2){ let x = sp.getX(i) + 9; const L = sp.getX(i+1) - sp.getX(i); if (x > 320) x = -420; sp.setX(i, x); sp.setX(i+1, x + L); } sp.needsUpdate = true; }
+  O.fodRing.visible = !!f.fodF; O.fodBeacons.forEach(b => b.visible = !!f.fodF);
+  if (f.fodF){ const P = W.FATOS[f.fodF]; O.fodRing.position.set(P[0], ROOF + 0.4, P[2]); const k = 1 + (time*0.8 % 1)*0.35; O.fodRing.scale.set(k, k, 1); O.fodRing.material.opacity = 0.9 - (time*0.8 % 1)*0.7;
+    [[-27,-27],[27,-27],[27,27],[-27,27]].forEach(([dx,dz], i) => { O.fodBeacons[i].position.set(P[0]+dx, ROOF+3, P[2]+dz); O.fodBeacons[i].visible = Math.sin(time*8 + i*1.6) > 0; });
+    O.fod.children.forEach((d, i) => { d.rotation.y += 0.05 + i*0.01; d.position.y = ROOF + 0.25 + Math.abs(Math.sin(time*4 + i))*1.2; }); }
+  Object.entries(O.xMarks).forEach(([fid, gx]) => { const on = G.m.fatos.includes(fid) && (f.closed > 0 || (f.inspect > 0 && f.fodF === fid)); gx.visible = on && Math.sin(time*5) > -0.6; });
   O.sock.rotation.y = 0.5 + Math.sin(time*(f.gust>0 ? 7 : 1.3)) * (f.gust>0 ? 0.3 : 0.1); O.sock.rotation.z = f.gust>0 ? Math.sin(time*11)*0.05 : -0.35;
   const fireS = Object.keys(G.fire)[0];
-  O.fire.visible = !!fireS; if (fireS){ const p = W.STAND[fireS]; O.fire.position.set(p[0], ROOF, p[2]); const k = 1 + Math.sin(time*14)*0.12; O.flame.scale.set(k, 1 + Math.sin(time*9)*0.22, k); O.fireLight.intensity = 2.4 + Math.sin(time*11)*0.8; O.fireGlow.scale.setScalar(30 + Math.sin(time*13)*4);
-    O.smoke.forEach((sm,i) => { const ph = (time*0.35 + i/6) % 1; sm.position.set(Math.sin(i*1.7)*3 + ph*12, 12 + ph*70, Math.cos(i*1.3)*3); sm.scale.setScalar(0.5 + ph*2.2); sm.material.opacity = 0.55*(1-ph); }); }
-  O.drone.visible = f.drone > 0; if (O.drone.visible){ O.drone.position.set(-175 + Math.sin(time*0.6)*60, 92 + Math.sin(time*1.7)*6, Math.sin(time*1.2)*60); O.droneRing.scale.setScalar(1 + Math.sin(time*6)*0.12); O.drone.userData.rotors.forEach(r => r.rotation.y += 1.1); O.drone.userData.strobe.visible = Math.sin(time*9) > 0.6; }
+  O.fire.visible = !!fireS; if (fireS){ const p = W.STAND[fireS]; O.fire.position.set(p[0], ROOF, p[2]); const burning = f.closed > 0; const k = (burning ? 1.5 : 0.35) * (1 + Math.sin(time*14)*0.12); O.flame.scale.set(k, (burning ? 1.6 : 0.3) * (1 + Math.sin(time*9)*0.22), k); O.fireLight.intensity = burning ? 3.4 + Math.sin(time*11)*1.2 : 0.4; O.fireGlow.scale.setScalar(burning ? 46 + Math.sin(time*13)*6 : 8); O.embers.visible = burning; O.fireBeacon.visible = burning && Math.sin(time*7) > 0;
+    if (burning){ const ep = O.embers.geometry.attributes.position; for (let i=0;i<ep.count;i++){ let y = ep.getY(i) + 0.9 + (i%4)*0.2; if (y > 70) y = 0; ep.setY(i, y); ep.setX(i, ep.getX(i) + Math.sin(time*2 + i)*0.15); } ep.needsUpdate = true; }
+    const big = f.closed > 0; O.smoke.forEach((sm,i) => { const ph = (time*0.35 + i/6) % 1; sm.position.set(Math.sin(i*1.7)*3 + ph*(big ? 20 : 8), 12 + ph*(big ? 110 : 45), Math.cos(i*1.3)*3); sm.scale.setScalar((big ? 1 : 0.4) + ph*(big ? 3.6 : 1.4)); sm.material.opacity = (big ? 0.7 : 0.35)*(1-ph); }); }
+  O.drone.visible = O.droneBeam.visible = f.drone > 0; if (O.drone.visible){ O.drone.position.set(-175 + Math.sin(time*0.6)*60, 92 + Math.sin(time*1.7)*6, Math.sin(time*1.2)*60); O.droneRing.scale.setScalar(1.3 + Math.sin(time*6)*0.25); O.droneBeam.position.set(O.drone.position.x, O.drone.position.y/2, O.drone.position.z); O.droneBeam.scale.set(1, O.drone.position.y, 1); O.droneBeam.material.opacity = 0.16 + Math.sin(time*6)*0.08; O.drone.userData.rotors.forEach(r => r.rotation.y += 1.1); O.drone.userData.strobe.visible = Math.sin(time*9) > 0.6; }
   O.truck.visible = !!(f.rescue && G.ac.some(a => a.emg)); if (O.truck.visible){ const on = Math.sin(time*10) > 0; O.truckLights[0].visible = on; O.truckLights[1].visible = !on; }
   O.beaconMat.opacity = Math.sin(time*2.6) > 0.2 ? 1 : 0.12;
 }
@@ -1539,6 +1665,29 @@ function applyCoach(){
   if (!COACH) return;
   document.querySelectorAll(`.ab[data-id="${COACH.id}"][data-k="${COACH.k}"]`).forEach(b => b.classList.add('coach'));
 }
+function renderFx(){
+  const f = G.flags, live = G.running && !G.paused;
+  const emg = G.ac.some(a => a.emg && AIR.concat(['approach']).includes(a.st)), nordo = G.ac.some(a => a.nordo);
+  $('#fx-gust').hidden = !(live && f.gust > 0);
+  $('#fx-alert').hidden = !(live && (emg || f.drone > 0 || f.closed > 0));
+  $('#fx-amber').hidden = !(live && !emg && !(f.drone > 0) && !(f.closed > 0) && (f.fod || nordo));
+  $('#fx-glitch').hidden = !(live && f.sys > 0);
+  const hz = [];
+  if (f.closed > 0) hz.push(['', '화재 · FATO 폐쇄', Math.ceil(f.closed)+'초']);
+  if (emg) hz.push(['', 'MAYDAY · 비상기 접근', '']);
+  if (f.drone > 0) hz.push(['', '미확인 드론 침입', Math.ceil(f.drone)+'초']);
+  if (f.gust > 0) hz.push(['amber', '돌풍 28kt', Math.ceil(f.gust)+'초']);
+  if (f.fod) hz.push(['amber', `FATO ${fNum(f.fodF)} 이물질`, f.inspect > 0 ? '점검 '+Math.ceil(f.inspect)+'초' : '']);
+  if (nordo) hz.push(['amber', '통신 두절 드론', '']);
+  if (f.sys > 0) hz.push(['blue', '관리시스템 장애', Math.ceil(f.sys)+'초']);
+  const el = $('#hzb'); el.hidden = !live || !hz.length;
+  const html = hz.map(([c, t, sub]) => `<span class="hz ${c}"><i></i>${t}${sub ? ` <span class="s">${sub}</span>` : ''}</span>`).join('');
+  if (el.dataset.h !== html){ el.dataset.h = html; el.innerHTML = html; }
+  SFX.loop('wind', live && f.gust > 0); SFX.loop('fire', live && f.closed > 0 && Object.keys(G.fire).length > 0);
+  SFX.loop('buzz', live && f.drone > 0); SFX.loop('static', live && nordo); SFX.loop('alarmLoop', live && emg);
+  const lvl = G.m.test && !G.tutorial ? testLevel(G.t) : 0;
+  MUSIC.intensity(!live ? 0 : Math.min(1, 0.3 + (hz.length ? 0.35 : 0) + lvl*0.05 + (G.t > G.len - 30 ? 0.2 : 0)));
+}
 function renderLog(){ if (!G.logDirty) return; G.logDirty = false; const el = $('#log'); el.innerHTML = G.logs.slice(-40).map(m => `<div class="m ${m.cls==='me'?'':m.cls}"><span class="tt">${m.t}</span><span>${esc(m.text)}</span></div>`).join(''); el.scrollTop = el.scrollHeight; }
 function refreshUI(force){ renderQueue(force); renderBoard(); renderHint(); if (force) G.ac.forEach(a => a.lsig = ''); }
 
@@ -1593,15 +1742,19 @@ $('#howbtn').onclick = () => { if (!G || G.tutorial) return; const b = $('#howbt
 function renderSoundBtn(){ const b = $('#g-sound'); b.textContent = SFX.on ? '소리 켜짐' : '소리 꺼짐'; b.setAttribute('aria-pressed', SFX.on); }
 $('#g-sound').onclick = () => { SFX.set(!SFX.on); if (SFX.on){ SFX.unlock(); SFX.play('tick'); } renderSoundBtn(); };
 renderSoundBtn();
+function renderMusicBtn(){ const b = $('#g-music'); b.textContent = MUSIC.on ? '음악 켜짐' : '음악 꺼짐'; b.setAttribute('aria-pressed', MUSIC.on); }
+$('#g-music').onclick = () => { MUSIC.set(!MUSIC.on); if (MUSIC.on) SFX.unlock(); renderMusicBtn(); };
+renderMusicBtn();
 $('#g-assist').onchange = e => { if (G){ G.assist = e.target.checked; refreshUI(true); } };
-function togglePause(){ if (!G || !G.running) return; G.paused = !G.paused; if (G.paused) SFX.hum(0); $('#pausebox').hidden = !G.paused; $('#g-pause').textContent = G.paused ? '계속' : '일시정지'; }
+function stopAmbience(){ ['wind','fire','buzz','static','alarmLoop'].forEach(n => SFX.loop(n, false)); MUSIC.intensity(0); ['#fx-gust','#fx-alert','#fx-amber','#fx-glitch','#hzb'].forEach(q => $(q).hidden = true); }
+function togglePause(){ if (!G || !G.running) return; G.paused = !G.paused; if (G.paused){ SFX.hum(0); renderFx(); } $('#pausebox').hidden = !G.paused; $('#g-pause').textContent = G.paused ? '계속' : '일시정지'; }
 $('#g-pause').onclick = togglePause; $('#resume').onclick = togglePause;
-$('#g-quit').onclick = () => { SFX.hum(0); if (G){ G.running = false; clearScene(); } T = null; $('#tcap').hidden = true; $('#tmark').hidden = true; document.querySelectorAll('.tut-ring').forEach(e => e.classList.remove('tut-ring')); $('#bov').hidden = true; renderMenu(); show('menu'); };
+$('#g-quit').onclick = () => { SFX.hum(0); stopAmbience(); if (G){ G.running = false; clearScene(); } T = null; $('#tcap').hidden = true; $('#tmark').hidden = true; document.querySelectorAll('.tut-ring').forEach(e => e.classList.remove('tut-ring')); $('#bov').hidden = true; renderMenu(); show('menu'); };
 document.addEventListener('keydown', e => { if (e.code==='Space' && G && G.running && !G.briefing && !$('#gamebox').hidden){ e.preventDefault(); togglePause(); } });
 document.addEventListener('visibilitychange', () => { if (document.hidden && G && G.running && !G.paused && !G.briefing) togglePause(); });
 
 function endMission(ok, why){
-  if (G.ended) return; G.ended = true; G.running = false; SFX.hum(0); SFX.play(ok ? 'win' : 'lose');
+  if (G.ended) return; G.ended = true; G.running = false; SFX.hum(0); stopAmbience(); SFX.play(ok ? 'win' : 'lose');
   const m = G.m, s = G.stats;
   const allEv = s.evTot === 0 || s.evOk === s.evTot;
   const timeLeftRatio = (G.len - G.t) / G.len;
@@ -1667,7 +1820,7 @@ const LAND_STEPS = (n, stand) => [
 ];
 const TUT = {
   16: [
-    { cam:'wide', tgt:{ pos:[0, ROOF, 0] }, say:'<b>테스트 단계</b>입니다. 15단계와 같은 버티포트(<b>FATO 2개 · 스탠드 6개</b>)를 <b>10분</b> 동안 운영합니다.', wait:'next' },
+    { cam:'wide', tgt:{ pos:[0, ROOF, 0] }, say:'<b>테스트 단계</b>입니다. <b>FATO 2개 · 스탠드 5개</b> 버티포트를 <b>10분</b> 동안 운영합니다.', wait:'next' },
     { tgt:{ ui:'#g-levelbox' }, say:'1분마다 <b>난이도가 한 단계씩</b> 오릅니다(Lv.1~10). 드론이 더 자주, 배터리가 더 적은 상태로 들어오고 돌발 상황도 잦아집니다.', wait:'next' },
     { tgt:{ ui:'.board' }, say:'위반 <b>6회</b> 또는 <b>강제 착륙 1회</b>면 그 시점에 끝납니다. <b>10분을 버티면 통과</b>입니다. 9분 무렵이 가장 어렵습니다.', wait:'next' }
   ],
@@ -1909,9 +2062,12 @@ let last = 0, uiAcc = 0, elapsed = 0;
 function frame(ts){
   const dt = Math.min(0.1, (ts - last)/1000 || 0); last = ts; elapsed += dt;
   if (R && G && !$('#gamebox').hidden){
-    if (G.running && !G.paused && !G.briefing){ update(G.tutorial ? (G.card && !G.card.answered ? 0 : dt * (G.tutSpeed || 1)) : dt); uiAcc += dt; if (uiAcc > 0.2){ uiAcc = 0; renderQueue(false); renderBoard(); renderHint(); SFX.hum(Math.min(0.08, 0.016 * G.ac.filter(a => AIR.includes(a.st) || ['approach','takeoff','taxi_in','taxi_out'].includes(a.st)).length)); } renderLog(); }
+    if (G.running && !G.paused && !G.briefing){ update(G.tutorial ? (G.card && !G.card.answered ? 0 : dt * (G.tutSpeed || 1)) : dt); uiAcc += dt; if (uiAcc > 0.2){ uiAcc = 0; renderQueue(false); renderBoard(); renderHint(); renderFx(); SFX.hum(Math.min(0.08, 0.016 * G.ac.filter(a => AIR.includes(a.st) || ['approach','takeoff','taxi_in','taxi_out'].includes(a.st)).length)); } renderLog(); }
     if (G.ac){ sync3D(elapsed); updateCam(dt); updateLabels(); if (T) posTut(); }
+    let shake = null;
+    if (G && G.flags && G.flags.gust > 0 && G.running && !G.paused){ const d = R.camera.position.distanceTo(R.controls.target) * 0.0016; shake = new THREE.Vector3(rnd(-1,1)*d, rnd(-1,1)*d*0.6, rnd(-1,1)*d); R.camera.position.add(shake); }
     R.renderer.render(R.scene, R.camera);
+    if (shake) R.camera.position.sub(shake);
   }
   requestAnimationFrame(frame);
 }
