@@ -323,7 +323,7 @@ table.rec .ok { color: var(--green); font-weight: 700; } table.rec .ng { color: 
             <p class="label">상황판 · 미션 목표</p>
             <div class="gl" id="goals"></div>
             <div style="margin-top:10px;border-top:1px dashed var(--line);padding-top:8px">
-              <div class="row"><span class="k">FATO 1</span><span class="v" id="s-fato"></span></div>
+              <div class="row"><span class="k">FATO</span><span class="v" id="s-fato"></span></div>
               <div class="row"><span class="k">바람</span><span class="v" id="s-wind"></span></div>
               <div class="row" id="s-sector-row"><span class="k">최종접근 구역</span><span class="v" id="s-sector"></span></div>
               <div class="row"><span class="k">관리시스템</span><span class="v" id="s-sys"></span></div>
@@ -438,6 +438,21 @@ MISSIONS.forEach(m => ['land','dep','park'].forEach(k => { if (m.goals[k]) m.goa
 /* 높은 단계 교통량 · 시간 보정 */
 [[11,{ min:4.5, spawn:{ every:12, max:4, bat:[52,74] } }],[12,{ min:5 }],[13,{ min:5.5, spawn:{ every:12, max:4, bat:[52,74] } }],[14,{ min:6, spawn:{ every:12, max:4, bat:[55,78] } }],[15,{ min:7, spawn:{ every:10, max:4, bat:[55,78] }, goals:{ land:13, dep:9, ev:5 } }]]
   .forEach(([id, o]) => Object.assign(MISSIONS.find(m => m.id===id), o));
+/* 버티포트 규모(단계별 확장) · 교통량(단계별 증가) */
+const VP = { 1:['F1','ABC'], 2:['F1','ABC'], 3:['F1','ABC'], 4:['F1','ABC'], 5:['F1','ABC'], 6:['F1','ABCD'], 7:['F1','ABCD'], 8:['F1','ABCD'], 9:['F1','ABCD'], 10:['F1','ABCD'],
+  11:['F1F2','ABCDE'], 12:['F1F2','ABCDE'], 13:['F1F2','ABCDEF'], 14:['F1F2','ABCDEF'], 15:['F1F2','ABCDEF'] };
+const TRAFFIC = { 3:[22,2], 4:[18,3], 5:[17,3], 6:[16,3], 7:[15,3], 8:[14,3], 9:[14,3], 10:[13,3], 11:[12,4], 12:[11,4], 13:[10,4], 14:[9.5,5], 15:[9,5] };
+const VP_NOTE = { 6:'버티포트 확장: <b>스탠드 D</b>가 열려 스탠드 4개로 운영합니다.', 11:'버티포트 확장: <b>FATO 2개</b> · 스탠드 5개. 착륙 · 지상이동 때 <b>비어 있는 FATO</b>를 골라 지시합니다.', 13:'버티포트 확장: <b>스탠드 6개</b>(A~F)로 운영합니다.' };
+MISSIONS.forEach(m => { if (VP_NOTE[m.id]) m.guide = [VP_NOTE[m.id]].concat(m.guide); });
+MISSIONS.forEach(m => {
+  const v = VP[m.id]; m.fatos = v[0].match(/F\d/g); m.cap = v[1].split('');
+  m.stands = m.id === 5 ? ['A','B'] : m.cap.slice();
+  const t = TRAFFIC[m.id]; if (t && m.spawn) m.spawn = { every:t[0], max:t[1], bat:m.spawn.bat };
+});
+/* 최종 목표: 단계별 최대 처리량의 약 60% (규모 · 교통량 증가에 맞춰 단계마다 상승) */
+const FINAL_GOALS = { 3:{ land:5, dep:4 }, 4:{ land:7, dep:3 }, 5:{ land:6, dep:5 }, 6:{ land:6, dep:5 }, 7:{ land:7, dep:5 }, 8:{ land:7, dep:6 }, 9:{ land:7, dep:5, emg:1 }, 10:{ land:8, dep:6 },
+  11:{ land:11, dep:9 }, 12:{ land:13, dep:11 }, 13:{ land:15, dep:13 }, 14:{ land:16, dep:13, emg:1 }, 15:{ land:19, dep:16 } };
+MISSIONS.forEach(m => { const g = FINAL_GOALS[m.id]; if (g) m.goals = Object.assign({}, g, m.goals.ev ? { ev:m.goals.ev } : {}); });
 const SURPRISE = { 9:{ n:1, p:0.6 }, 10:{ n:1, p:0.6 }, 11:{ n:1, p:1 }, 12:{ n:1, p:1 }, 13:{ n:2, p:0.8 }, 14:{ n:1, p:1 } };
 MISSIONS.forEach(m => { if (SURPRISE[m.id] || m.events === 'random') m.surprise = true; });
 const TIER_NAME = { 1:['기초 운영','착륙 · 출발 · 순서 · 스탠드'], 2:['상황 대응 입문','광역 교통과 단일 상황'], 3:['고급 상황 · 종합','복합 상황과 최종 평가'] };
@@ -543,12 +558,11 @@ $('#m-list').onclick = () => { const l = $('#mlist'); l.hidden = !l.hidden; $('#
    ========================================================= */
 const ROOF = 40;
 const W = {
-  FATO:[-20,ROOF+2,0], TAXI:[14,ROOF+2,0], APRON:[-20,ROOF+2,40],
-  STAND:{ A:[42,ROOF+2,-27], B:[42,ROOF+2,0], C:[42,ROOF+2,27] },
-  FINAL:[-150,82,0], HOLD:{ N1:[-130,104,-130], S1:[-130,104,130] }, HR:24,
-  CLIMB:[-20,135,0],
-  ENTRY:{ N1:[-280,135,-250], S1:[-280,135,250] },
-  SECTOR:{ x0:-240, x1:-55, z0:-70, z1:70 }
+  FATOS:{ F1:[-45,ROOF+2,-40], F2:[-45,ROOF+2,40] }, TAXIX:25, APRON:[6,ROOF+2,0],
+  STAND:{ A:[55,ROOF+2,-62], B:[55,ROOF+2,-37], C:[55,ROOF+2,-12], D:[55,ROOF+2,12], E:[55,ROOF+2,37], F:[55,ROOF+2,62] },
+  FINALS:{ F1:[-180,82,-40], F2:[-180,82,40] }, HOLD:{ N1:[-165,104,-165], S1:[-165,104,165] }, HR:24,
+  ENTRY:{ N1:[-320,135,-290], S1:[-320,135,290] },
+  SECTOR:{ x0:-275, x1:-80, z0:-110, z1:110 }
 };
 const PORTS = [
   { name:'김포', pos:[-620,0,-320], side:'N1' },
@@ -558,7 +572,7 @@ const PORTS = [
 ];
 const PORT = n => PORTS.find(p => p.name===n);
 const CRUISE = 150;
-const TRANSIT_ROUTE = [[-620,CRUISE,-320],[-300,CRUISE-30,-60],[-150,CRUISE-40,0],[0,CRUISE-30,120],[560,CRUISE,300]]; // Gimpo -> Jamsil, crosses our final
+const TRANSIT_ROUTE = [[-620,CRUISE,-320],[-330,CRUISE-30,-70],[-175,CRUISE-40,0],[20,CRUISE-30,160],[560,CRUISE,300]]; // Gimpo -> Jamsil, crosses our final
 const VISUAL_ROUTE = [[460,CRUISE+20,-420],[260,CRUISE+20,-60],[180,CRUISE+20,180],[-500,CRUISE+20,330]]; // Suseo -> Yeouido, far east
 
 /* =========================================================
@@ -675,29 +689,29 @@ function hudAdd(o){ o.userData.hud = true; R.scene.add(o); (R.hudObjs = R.hudObj
 
 /* ---------- rooftop deck texture ---------- */
 function deckTexture(){
-  const PX = 14.6, W0 = 140, D0 = 110; const X = x => (x+70)*PX, Z = z => (z+55)*PX;
+  const PX = 11.4, W0 = 180, D0 = 170; const X = x => (x+90)*PX, Z = z => (z+85)*PX;
   return ctex(Math.round(W0*PX), Math.round(D0*PX), (g, w, h) => {
     g.fillStyle = '#6E7174'; g.fillRect(0,0,w,h);
-    for (let i=0;i<9000;i++){ const v = 95 + Math.random()*30|0; g.fillStyle = `rgba(${v},${v},${v+2},.18)`; g.fillRect(Math.random()*w, Math.random()*h, 2+Math.random()*3, 2+Math.random()*3); }
+    for (let i=0;i<12000;i++){ const v = 95 + Math.random()*30|0; g.fillStyle = `rgba(${v},${v},${v+2},.18)`; g.fillRect(Math.random()*w, Math.random()*h, 2+Math.random()*3, 2+Math.random()*3); }
     g.strokeStyle = 'rgba(40,40,40,.35)'; g.lineWidth = 2; for (let x=0;x<w;x+=6*PX){ g.beginPath(); g.moveTo(x,0); g.lineTo(x,h); g.stroke(); } for (let y=0;y<h;y+=6*PX){ g.beginPath(); g.moveTo(0,y); g.lineTo(w,y); g.stroke(); }
-    // edge hatch
     g.save(); g.beginPath(); g.rect(0,0,w,h); g.rect(1.6*PX,1.6*PX,w-3.2*PX,h-3.2*PX); g.clip('evenodd'); g.fillStyle = '#D9A520'; g.fillRect(0,0,w,h); g.fillStyle = '#1C1C1C'; for (let i=-h;i<w;i+=2.4*PX){ g.beginPath(); g.moveTo(i,0); g.lineTo(i+1.2*PX,0); g.lineTo(i+1.2*PX+h,h); g.lineTo(i+h,h); g.fill(); } g.restore();
-    // safety area dashed
-    g.setLineDash([2*PX, 1.4*PX]); g.strokeStyle = '#F2F2EE'; g.lineWidth = 0.4*PX; g.strokeRect(X(-55), Z(-35), 70*PX, 70*PX); g.setLineDash([]);
-    // FATO
-    g.fillStyle = '#3F4346'; g.fillRect(X(-45), Z(-25), 50*PX, 50*PX);
-    g.strokeStyle = '#F4F4F0'; g.lineWidth = 0.9*PX; g.strokeRect(X(-45)+0.45*PX, Z(-25)+0.45*PX, 49.1*PX, 49.1*PX);
-    g.strokeStyle = '#F2C230'; g.lineWidth = 1.0*PX; g.beginPath(); g.arc(X(-20), Z(0), 15*PX, 0, Math.PI*2); g.stroke();
-    g.fillStyle = '#F4F4F0'; g.fillRect(X(-26.5), Z(-7), 2.4*PX, 14*PX); g.fillRect(X(-15.9), Z(-7), 2.4*PX, 14*PX); g.fillRect(X(-26.5), Z(-1.2), 13*PX, 2.4*PX);
-    g.font = `700 ${4*PX}px Arial`; g.fillText('1', X(-43), Z(-19)); g.save(); g.translate(X(-20), Z(22.5)); g.font = `700 ${2.2*PX}px Arial`; g.textAlign='center'; g.fillText('FATO 1', 0, 0); g.restore();
-    // taxi lines
-    g.strokeStyle = '#E8B91F'; g.lineWidth = 0.45*PX; g.beginPath(); g.moveTo(X(5),Z(0)); g.lineTo(X(14),Z(0)); g.moveTo(X(14),Z(-27)); g.lineTo(X(14),Z(27)); [-27,0,27].forEach(z => { g.moveTo(X(14),Z(z)); g.lineTo(X(30),Z(z)); }); g.stroke();
-    g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = 0.12*PX; g.stroke();
-    // stands
-    [['A',-27],['B',0],['C',27]].forEach(([s,z]) => { g.strokeStyle = '#F4F4F0'; g.lineWidth = 0.5*PX; g.strokeRect(X(29), Z(z-10), 26*PX, 20*PX); g.fillStyle = 'rgba(244,244,240,.85)'; g.font = `700 ${7*PX}px Arial`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(s, X(50), Z(z)); g.strokeStyle = '#E8B91F'; g.lineWidth = 0.35*PX; g.beginPath(); g.arc(X(42), Z(z), 4*PX, 0, Math.PI*2); g.stroke(); });
-    // apron
-    g.setLineDash([1.2*PX, 0.9*PX]); g.strokeStyle = '#E8B91F'; g.lineWidth = 0.4*PX; g.strokeRect(X(-34), Z(33), 28*PX, 16*PX); g.setLineDash([]);
-    g.fillStyle = 'rgba(232,185,31,.9)'; g.font = `700 ${2.2*PX}px "Noto Sans KR", sans-serif`; g.textAlign = 'center'; g.fillText('임시 주기', X(-20), Z(41));
+    Object.entries(W.FATOS).forEach(([fid, p], idx) => {
+      const cx = p[0], cz = p[2];
+      g.setLineDash([2*PX, 1.4*PX]); g.strokeStyle = '#F2F2EE'; g.lineWidth = 0.4*PX; g.strokeRect(X(cx-35), Z(cz-35), 70*PX, 70*PX); g.setLineDash([]);
+      g.fillStyle = '#3F4346'; g.fillRect(X(cx-25), Z(cz-25), 50*PX, 50*PX);
+      g.strokeStyle = '#F4F4F0'; g.lineWidth = 0.9*PX; g.strokeRect(X(cx-25)+0.45*PX, Z(cz-25)+0.45*PX, 49.1*PX, 49.1*PX);
+      g.strokeStyle = '#F2C230'; g.lineWidth = 1.0*PX; g.beginPath(); g.arc(X(cx), Z(cz), 15*PX, 0, Math.PI*2); g.stroke();
+      g.fillStyle = '#F4F4F0'; g.fillRect(X(cx-6.5), Z(cz-7), 2.4*PX, 14*PX); g.fillRect(X(cx+4.1), Z(cz-7), 2.4*PX, 14*PX); g.fillRect(X(cx-6.5), Z(cz-1.2), 13*PX, 2.4*PX);
+      g.font = `700 ${5*PX}px Arial`; g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillText(String(idx+1), X(cx-23), Z(cz-18));
+    });
+    g.strokeStyle = '#E8B91F'; g.lineWidth = 0.45*PX; g.beginPath();
+    Object.values(W.FATOS).forEach(p => { g.moveTo(X(p[0]+25), Z(p[2])); g.lineTo(X(W.TAXIX), Z(p[2])); });
+    g.moveTo(X(W.TAXIX), Z(-70)); g.lineTo(X(W.TAXIX), Z(70));
+    Object.values(W.STAND).forEach(p => { g.moveTo(X(W.TAXIX), Z(p[2])); g.lineTo(X(p[0]-13), Z(p[2])); });
+    g.stroke();
+    Object.entries(W.STAND).forEach(([sid, p]) => { g.strokeStyle = '#F4F4F0'; g.lineWidth = 0.5*PX; g.strokeRect(X(p[0]-13), Z(p[2]-10), 26*PX, 20*PX); g.fillStyle = 'rgba(244,244,240,.85)'; g.font = `700 ${7*PX}px Arial`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(sid, X(p[0]+8), Z(p[2])); g.strokeStyle = '#E8B91F'; g.lineWidth = 0.35*PX; g.beginPath(); g.arc(X(p[0]), Z(p[2]), 4*PX, 0, Math.PI*2); g.stroke(); });
+    const ap = W.APRON; g.setLineDash([1.2*PX, 0.9*PX]); g.strokeStyle = '#E8B91F'; g.lineWidth = 0.4*PX; g.strokeRect(X(ap[0]-11), Z(ap[2]-8), 22*PX, 16*PX); g.setLineDash([]);
+    g.fillStyle = 'rgba(232,185,31,.9)'; g.font = `700 ${2.2*PX}px "Noto Sans KR", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('임시 주기', X(ap[0]), Z(ap[2]));
   });
 }
 function groundTexture(){
@@ -721,7 +735,7 @@ function buildWorld(){
   // ground with road grid (roads at x,z = k*100+50)
   const gt = groundTexture(); gt.repeat.set(40, 40); gt.offset.set(0.5, 0.5);
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), std(0xFFFFFF, 0.95, 0, { map:gt })); ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; S.add(ground);
-  const plaza = new THREE.Mesh(new THREE.PlaneGeometry(250, 210), std(0x8E8F8C, 0.9)); plaza.rotation.x = -Math.PI/2; plaza.position.y = 0.15; plaza.receiveShadow = true; S.add(plaza);
+  const plaza = new THREE.Mesh(new THREE.PlaneGeometry(320, 300), std(0x8E8F8C, 0.9)); plaza.rotation.x = -Math.PI/2; plaza.position.y = 0.15; plaza.receiveShadow = true; S.add(plaza);
   // river, banks, bridges
   const river = new THREE.Mesh(new THREE.PlaneGeometry(4000, 120), std(0x1E3A55, 0.08, 0.9, { envMapIntensity:1.4 })); river.rotation.x = -Math.PI/2; river.position.set(0, 0.35, 210); S.add(river);
   [[140],[280]].forEach(([z]) => { const b = new THREE.Mesh(new THREE.PlaneGeometry(4000, 22), std(0x3C5634, 0.95)); b.rotation.x = -Math.PI/2; b.position.set(0, 0.3, z); b.receiveShadow = true; S.add(b); });
@@ -735,12 +749,12 @@ function buildWorld(){
   const kinds = ['office','glass','resi','office'];
   const mats = kinds.map(facade); const roofMat = std(0x55585B, 0.92);
   const parts = kinds.map(() => []), roofs = [], beacons = [];
-  const avoid = [[0,0,140]].concat(PORTS.map(p => [p.pos[0], p.pos[2], 95]));
+  const avoid = [[0,0,175]].concat(PORTS.map(p => [p.pos[0], p.pos[2], 95]));
   for (let bx=-1000; bx<=1000; bx+=100) for (let bz=-800; bz<=800; bz+=100){
     if (Math.abs(bz-210) < 80) continue;
     if (avoid.some(a => Math.hypot(bx-a[0], bz-a[1]) < a[2])) continue;
     const dist = Math.hypot(bx, bz);
-    const clear = bx > -340 && bx < -40 && Math.abs(bz) < 110; // obstacle-free approach surface
+    const clear = bx > -380 && bx < -60 && Math.abs(bz) < 140; // obstacle-free approach surface
     const lots = Math.random() < 0.45 ? [[0,0,70]] : [[-19,-19,32],[19,-19,32],[-19,19,32],[19,19,32]].filter(() => Math.random() < 0.85);
     lots.forEach(([ox,oz,s]) => {
       const w = s*rnd(0.72,1), d = s*rnd(0.72,1);
@@ -766,51 +780,56 @@ function buildWorld(){
   const treeN = 520; const crown = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), std(0x2E4A2A, 0.9), treeN); const trunk = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.35, 0.45, 1, 6), std(0x4A3A2C, 0.9), treeN);
   crown.castShadow = true; const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), Sc = new THREE.Vector3();
   for (let i=0;i<treeN;i++){
-    let x, z; if (i < 420){ x = rnd(-1100, 1100); z = i%2 ? rnd(132,148) : rnd(272,288); } else { const a = rnd(0, Math.PI*2); x = Math.cos(a)*rnd(95,120); z = Math.sin(a)*rnd(80,100); }
+    let x, z; if (i < 420){ x = rnd(-1100, 1100); z = i%2 ? rnd(132,148) : rnd(272,288); } else { const a = rnd(0, Math.PI*2); x = Math.cos(a)*rnd(115,145); z = Math.sin(a)*rnd(100,130); }
     const s = rnd(3.2, 5.5); M.compose(V.set(x, 3 + s*0.8, z), Q, Sc.set(s, s*1.15, s)); crown.setMatrixAt(i, M);
     M.compose(V.set(x, 1.6, z), Q, Sc.set(1, 3.2, 1)); trunk.setMatrixAt(i, M);
   }
   S.add(crown); S.add(trunk);
 
-  // ===== our vertiport tower =====
-  const tower = new THREE.Mesh(new THREE.BoxGeometry(140, ROOF, 110), facade('tower')); tower.position.set(0, ROOF/2, 0); tower.castShadow = tower.receiveShadow = true;
-  { const uv = tower.geometry.attributes.uv; for (let f=0; f<6; f++){ const su = f<2 ? 110/32 : 140/32, sv = ROOF/57.6; for (let i=0;i<4;i++){ const k=f*4+i; uv.setXY(k, uv.getX(k)*su, uv.getY(k)*sv); } } }
+  // ===== our vertiport tower (largest layout built once; parts open per mission) =====
+  const BW = 180, BD = 170;
+  const tower = new THREE.Mesh(new THREE.BoxGeometry(BW, ROOF, BD), facade('tower')); tower.position.set(0, ROOF/2, 0); tower.castShadow = tower.receiveShadow = true;
+  { const uv = tower.geometry.attributes.uv; for (let f=0; f<6; f++){ const su = f<2 ? BD/32 : BW/32, sv = ROOF/57.6; for (let i=0;i<4;i++){ const k=f*4+i; uv.setXY(k, uv.getX(k)*su, uv.getY(k)*sv); } } }
   S.add(tower);
-  const deck = new THREE.Mesh(new THREE.PlaneGeometry(140, 110), std(0xFFFFFF, 0.85, 0, { map:deckTexture() })); deck.rotation.x = -Math.PI/2; deck.position.set(0, ROOF+0.05, 0); deck.receiveShadow = true; S.add(deck);
+  const deck = new THREE.Mesh(new THREE.PlaneGeometry(BW, BD), std(0xFFFFFF, 0.85, 0, { map:deckTexture() })); deck.rotation.x = -Math.PI/2; deck.position.set(0, ROOF+0.05, 0); deck.receiveShadow = true; S.add(deck);
   const glassP = std(0x9FC4DA, 0.05, 0.2, { transparent:true, opacity:0.28 });
-  [[0,-55.2,140,0.3],[0,55.2,140,0.3],[-70.2,0,0.3,110],[70.2,0,0.3,110]].forEach(([x,z,w,d]) => { const p = new THREE.Mesh(new THREE.BoxGeometry(w, 1.4, d), glassP); p.position.set(x, ROOF+0.7, z); S.add(p); const cap = new THREE.Mesh(new THREE.BoxGeometry(Math.max(w,0.5), 0.15, Math.max(d,0.5)), std(0x9AA0A6, 0.4, 0.8)); cap.position.set(x, ROOF+1.45, z); S.add(cap); });
-  // terminal pavilion
-  const pav = new THREE.Mesh(new THREE.BoxGeometry(28, 6, 9), std(0x86AECB, 0.06, 0.3, { transparent:true, opacity:0.45 })); pav.position.set(32, ROOF+3, -47); S.add(pav);
-  const pavRoof = new THREE.Mesh(new THREE.BoxGeometry(30, 0.6, 11), std(0xC9CCCF, 0.5, 0.4)); pavRoof.position.set(32, ROOF+6.3, -47); pavRoof.castShadow = true; S.add(pavRoof);
-  const pavLight = glow(glowMat(0xFFE2B0, 0.35), 12); pavLight.position.set(32, ROOF+3, -47); S.add(pavLight);
-  // FATO edge lights (colour = FATO state) and TLOF lights
-  O.fatoLight = glowMat(0x3CFF9A, 0.9); const bulb = new THREE.MeshBasicMaterial({ color:0xE8FFF2 });
-  for (let i=0;i<20;i++){ const side = Math.floor(i/5), t = (i%5)/5; let x, z; if (side===0){ x=-45+50*t; z=-25; } else if (side===1){ x=5; z=-25+50*t; } else if (side===2){ x=5-50*t; z=25; } else { x=-45; z=25-50*t; }
-    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.35,0.35,0.4,8), bulb); b.position.set(x, ROOF+0.25, z); S.add(b); const gl = glow(O.fatoLight, 2.2); gl.position.set(x, ROOF+0.5, z); S.add(gl); }
-  const tlofMat = glowMat(0xFFD66A, 0.9); for (let i=0;i<12;i++){ const a = i/12*Math.PI*2; const gl = glow(tlofMat, 1.6); gl.position.set(-20+Math.cos(a)*15, ROOF+0.4, Math.sin(a)*15); S.add(gl); }
-  O.fatoTint = new THREE.MeshBasicMaterial({ color:0x2F8F6A, transparent:true, opacity:0.0, depthWrite:false });
-  const tint = new THREE.Mesh(new THREE.PlaneGeometry(50, 50), O.fatoTint); tint.rotation.x = -Math.PI/2; tint.position.set(-20, ROOF+0.12, 0); S.add(tint);
-  // stands: tint overlay, charger with screen
-  O.stands = {};
-  Object.entries(W.STAND).forEach(([s,p]) => {
-    const m = new THREE.MeshBasicMaterial({ color:0x4CC38A, transparent:true, opacity:0.12, depthWrite:false });
-    const pl = new THREE.Mesh(new THREE.PlaneGeometry(26, 20), m); pl.rotation.x = -Math.PI/2; pl.position.set(p[0]+2, ROOF+0.1, p[2]); S.add(pl);
-    const ch = new THREE.Mesh(new THREE.BoxGeometry(2.4, 5, 3.6), std(0xD7DADD, 0.35, 0.5)); ch.position.set(p[0]+17, ROOF+2.5, p[2]); ch.castShadow = true; S.add(ch);
-    const scr = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.6), new THREE.MeshBasicMaterial({ color:0x4FA3FF })); scr.rotation.y = -Math.PI/2; scr.position.set(p[0]+15.75, ROOF+3.4, p[2]); S.add(scr);
-    const off = textSprite('정비 중', '#C9D2DC', 6); off.position.set(p[0], ROOF+8, p[2]); off.visible = false; S.add(off);
-    O.stands[s] = { mat:m, off, screen:scr };
+  [[0,-BD/2-0.2,BW,0.3],[0,BD/2+0.2,BW,0.3],[-BW/2-0.2,0,0.3,BD],[BW/2+0.2,0,0.3,BD]].forEach(([x,z,w,d]) => { const p = new THREE.Mesh(new THREE.BoxGeometry(w, 1.4, d), glassP); p.position.set(x, ROOF+0.7, z); S.add(p); const cap = new THREE.Mesh(new THREE.BoxGeometry(Math.max(w,0.5), 0.15, Math.max(d,0.5)), std(0x9AA0A6, 0.4, 0.8)); cap.position.set(x, ROOF+1.45, z); S.add(cap); });
+  const pav = new THREE.Mesh(new THREE.BoxGeometry(9, 6, 34), std(0x86AECB, 0.06, 0.3, { transparent:true, opacity:0.45 })); pav.position.set(82, ROOF+3, 0); S.add(pav);
+  const pavRoof = new THREE.Mesh(new THREE.BoxGeometry(11, 0.6, 36), std(0xC9CCCF, 0.5, 0.4)); pavRoof.position.set(82, ROOF+6.3, 0); pavRoof.castShadow = true; S.add(pavRoof);
+  const pavLight = glow(glowMat(0xFFE2B0, 0.35), 12); pavLight.position.set(82, ROOF+3, 0); S.add(pavLight);
+  // per-FATO lights, tint, label, "확장 예정" cover
+  O.fato = {}; const bulb = new THREE.MeshBasicMaterial({ color:0xE8FFF2 }); const tlofMat = glowMat(0xFFD66A, 0.9);
+  const coverMat = () => new THREE.MeshBasicMaterial({ color:0x2A3442, transparent:true, opacity:0.78, depthWrite:false });
+  Object.entries(W.FATOS).forEach(([fid, p], idx) => {
+    const light = glowMat(0x3CFF9A, 0.9), cx = p[0], cz = p[2]; const lights = [];
+    for (let i=0;i<20;i++){ const side = Math.floor(i/5), t = (i%5)/5; let x, z; if (side===0){ x=cx-25+50*t; z=cz-25; } else if (side===1){ x=cx+25; z=cz-25+50*t; } else if (side===2){ x=cx+25-50*t; z=cz+25; } else { x=cx-25; z=cz+25-50*t; }
+      const b = new THREE.Mesh(new THREE.CylinderGeometry(0.35,0.35,0.4,8), bulb); b.position.set(x, ROOF+0.25, z); S.add(b); const gl = glow(light, 2.2); gl.position.set(x, ROOF+0.5, z); S.add(gl); lights.push(gl); }
+    for (let i=0;i<12;i++){ const a = i/12*Math.PI*2; const gl = glow(tlofMat, 1.6); gl.position.set(cx+Math.cos(a)*15, ROOF+0.4, cz+Math.sin(a)*15); S.add(gl); lights.push(gl); }
+    const tint = new THREE.MeshBasicMaterial({ color:0x2F8F6A, transparent:true, opacity:0.0, depthWrite:false });
+    const tm = new THREE.Mesh(new THREE.PlaneGeometry(50, 50), tint); tm.rotation.x = -Math.PI/2; tm.position.set(cx, ROOF+0.12, cz); S.add(tm);
+    const cover = new THREE.Mesh(new THREE.PlaneGeometry(70, 70), coverMat()); cover.rotation.x = -Math.PI/2; cover.position.set(cx, ROOF+0.2, cz); cover.visible = false; S.add(cover);
+    const coverTxt = textSprite('FATO '+(idx+1)+' 확장 예정', '#C9D2DC', 5); coverTxt.position.set(cx, ROOF+5, cz); coverTxt.visible = false; S.add(coverTxt);
+    const lbl = textSprite('FATO '+(idx+1), '#E9EEF3', 7); lbl.position.set(cx, ROOF+4, cz-31); hudAdd(lbl);
+    O.fato[fid] = { light, tint, lights, cover, coverTxt, lbl };
   });
-  // windsock
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.18, 7, 8), std(0xC8CCD0, 0.4, 0.8)); pole.position.set(62, ROOF+3.5, 48); S.add(pole);
+  O.stands = {};
+  Object.entries(W.STAND).forEach(([sid,p]) => {
+    const m = new THREE.MeshBasicMaterial({ color:0x4CC38A, transparent:true, opacity:0.12, depthWrite:false });
+    const pl = new THREE.Mesh(new THREE.PlaneGeometry(26, 20), m); pl.rotation.x = -Math.PI/2; pl.position.set(p[0], ROOF+0.1, p[2]); S.add(pl);
+    const ch = new THREE.Mesh(new THREE.BoxGeometry(2.4, 5, 3.6), std(0xD7DADD, 0.35, 0.5)); ch.position.set(p[0]+16, ROOF+2.5, p[2]); ch.castShadow = true; S.add(ch);
+    const scr = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.6), new THREE.MeshBasicMaterial({ color:0x4FA3FF })); scr.rotation.y = -Math.PI/2; scr.position.set(p[0]+14.75, ROOF+3.4, p[2]); S.add(scr);
+    const off = textSprite('정비 중', '#C9D2DC', 6); off.position.set(p[0], ROOF+8, p[2]); off.visible = false; S.add(off);
+    const fut = textSprite('확장 예정', '#C9D2DC', 3.5); fut.position.set(p[0], ROOF+4, p[2]); fut.visible = false; S.add(fut);
+    const cover = new THREE.Mesh(new THREE.PlaneGeometry(28, 22), coverMat()); cover.rotation.x = -Math.PI/2; cover.position.set(p[0], ROOF+0.2, p[2]); cover.visible = false; S.add(cover);
+    O.stands[sid] = { mat:m, off, fut, cover, screen:scr, charger:ch };
+  });
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.18, 7, 8), std(0xC8CCD0, 0.4, 0.8)); pole.position.set(84, ROOF+3.5, 78); S.add(pole);
   const sockTex = ctex(64, 256, (g,w,h) => { for (let i=0;i<5;i++){ g.fillStyle = i%2 ? '#F4F4F0' : '#F06A1E'; g.fillRect(0, i*h/5, w, h/5); } });
   const sock = new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.35, 5, 14, 1, true), std(0xFFFFFF, 0.8, 0, { map:sockTex, side:THREE.DoubleSide }));
-  sock.geometry.rotateZ(Math.PI/2); sock.geometry.translate(2.5, 0, 0); const sockPivot = new THREE.Group(); sockPivot.position.set(62, ROOF+6.8, 48); sockPivot.add(sock); S.add(sockPivot); O.sock = sockPivot;
-  // labels
-  const ours = textSprite('도심 버티포트 (관할)', '#F2A93B', 16, 0.034); ours.position.set(20, ROOF+45, -70); hudAdd(ours);
-  const fl = textSprite('FATO 1', '#E9EEF3', 7); fl.position.set(-20, ROOF+4, -31); hudAdd(fl);
-  // holds, final, sector (HUD)
+  sock.geometry.rotateZ(Math.PI/2); sock.geometry.translate(2.5, 0, 0); const sockPivot = new THREE.Group(); sockPivot.position.set(84, ROOF+6.8, 78); sockPivot.add(sock); S.add(sockPivot); O.sock = sockPivot;
+  const ours = textSprite('도심 버티포트 (관할)', '#F2A93B', 16, 0.034); ours.position.set(20, ROOF+48, -95); hudAdd(ours);
   Object.entries(W.HOLD).forEach(([k,c]) => { hudAdd(loop(c, W.HR, c[1], 0x9CC4EA)); const t = textSprite(k+' 대기', '#BFD8F0', 9, 0.024); t.position.set(c[0], c[1]+18, c[2]); hudAdd(t); });
-  O.final = hudAdd(dashed([[-300,135,0], W.FINAL, [-60,60,0], W.FATO], 0x4CC38A, 8, 6, 0.9));
+  O.finals = {}; Object.entries(W.FATOS).forEach(([fid, p]) => { O.finals[fid] = hudAdd(dashed([[-330,135,p[2]], W.FINALS[fid], [-100,58,p[2]], p], 0x4CC38A, 8, 6, 0.9)); });
   const sx = W.SECTOR; O.sectorMat = new THREE.MeshBasicMaterial({ color:0x4CC38A, transparent:true, opacity:0.05, side:THREE.DoubleSide, depthWrite:false, fog:false });
   const sec = new THREE.Mesh(new THREE.BoxGeometry(sx.x1-sx.x0, 70, sx.z1-sx.z0), O.sectorMat); sec.position.set((sx.x0+sx.x1)/2, 110, (sx.z0+sx.z1)/2); O.sector = hudAdd(sec);
   O.sectorEdge = new THREE.LineSegments(new THREE.EdgesGeometry(sec.geometry), new THREE.LineBasicMaterial({ color:0x4CC38A, transparent:true, opacity:0.5, fog:false })); O.sectorEdge.position.copy(sec.position); hudAdd(O.sectorEdge);
@@ -828,20 +847,20 @@ function buildWorld(){
   hudAdd(dashed(VISUAL_ROUTE, 0x8E9AA8, 16, 10, 0.3));
   O.transitLabel = textSprite('김포–잠실 회랑 (통과)', '#D0D6DC', 22, 0.026); O.transitLabel.position.set(-330, CRUISE, -90); hudAdd(O.transitLabel);
   // hazards
-  O.fod = new THREE.Group(); [[-28,-8],[-12,10],[-22,14],[-8,-12],[-30,6]].forEach(([x,z]) => { const f = new THREE.Mesh(new THREE.BoxGeometry(1.4,0.08,1.0), std(0xE8E2D2, 0.6, 0, { side:THREE.DoubleSide })); f.position.set(x, ROOF+0.25, z); f.rotation.y = Math.random()*3; O.fod.add(f); }); O.fod.visible = false; S.add(O.fod);
+  O.fod = new THREE.Group(); [[-8,-8],[8,10],[-2,14],[12,-12],[-10,6]].forEach(([x,z]) => { const f = new THREE.Mesh(new THREE.BoxGeometry(1.4,0.08,1.0), std(0xE8E2D2, 0.6, 0, { side:THREE.DoubleSide })); f.position.set(x, ROOF+0.25, z); f.rotation.y = Math.random()*3; O.fod.add(f); }); O.fod.visible = false; S.add(O.fod);
   O.fire = new THREE.Group();
   const flame = new THREE.Mesh(new THREE.ConeGeometry(4, 13, 14, 1, true), new THREE.MeshBasicMaterial({ color:0xFF7A2E, transparent:true, opacity:0.85, blending:THREE.AdditiveBlending, depthWrite:false })); flame.position.y = 6.5; O.fire.add(flame); O.flame = flame;
   const fg = glow(glowMat(0xFF8A3A, 1), 34); fg.position.y = 7; O.fire.add(fg); O.fireGlow = fg;
   O.smoke = []; for (let i=0;i<6;i++){ const sm = new THREE.Mesh(new THREE.SphereGeometry(5, 12, 10), std(0x3A3E44, 1, 0, { transparent:true, opacity:0.5, depthWrite:false })); O.fire.add(sm); O.smoke.push(sm); }
   O.fireLight = new THREE.PointLight(0xFF7A3D, 3, 140, 2); O.fireLight.position.y = 10; O.fire.add(O.fireLight);
   O.fire.visible = false; S.add(O.fire);
-  O.gust = new THREE.Group(); const gm = new THREE.MeshBasicMaterial({ color:0xE6F0FA, transparent:true, opacity:0.22, depthWrite:false }); for (let i=0;i<22;i++){ const g = new THREE.Mesh(new THREE.BoxGeometry(40, 0.25, 0.25), gm); g.position.set(rnd(-220,120), rnd(ROOF+6, 130), rnd(-90,90)); O.gust.add(g); } O.gust.visible = false; S.add(O.gust);
+  O.gust = new THREE.Group(); const gm = new THREE.MeshBasicMaterial({ color:0xE6F0FA, transparent:true, opacity:0.22, depthWrite:false }); for (let i=0;i<22;i++){ const g = new THREE.Mesh(new THREE.BoxGeometry(40, 0.25, 0.25), gm); g.position.set(rnd(-240,120), rnd(ROOF+6, 130), rnd(-110,110)); O.gust.add(g); } O.gust.visible = false; S.add(O.gust);
   O.drone = makeCraft('rogue'); const dr = new THREE.Mesh(new THREE.RingGeometry(14, 15.5, 40), new THREE.MeshBasicMaterial({ color:0xEF6A55, side:THREE.DoubleSide, transparent:true, opacity:0.75, fog:false })); dr.rotation.x = -Math.PI/2; O.drone.add(dr); O.droneRing = dr; O.drone.visible = false; S.add(O.drone);
   // rescue vehicle at ground
   O.truck = new THREE.Group(); const tb = new THREE.Mesh(new THREE.BoxGeometry(10, 3.4, 3.2), std(0xB8231B, 0.4, 0.3)); tb.position.y = 2.2; tb.castShadow = true; O.truck.add(tb);
   const cab = new THREE.Mesh(new THREE.BoxGeometry(3, 2.6, 3.1), std(0xD8DCE0, 0.2, 0.4)); cab.position.set(-6, 1.8, 0); O.truck.add(cab);
   O.truckLights = [glow(glowMat(0xFF2A2A, 1), 6), glow(glowMat(0x3A7BFF, 1), 6)]; O.truckLights[0].position.set(-6, 3.6, -0.8); O.truckLights[1].position.set(-6, 3.6, 0.8); O.truckLights.forEach(l => O.truck.add(l));
-  O.truck.position.set(-40, 0, 72); O.truck.visible = false; S.add(O.truck);
+  O.truck.position.set(-50, 0, 108); O.truck.visible = false; S.add(O.truck);
 }
 
 /* ---------- drone models (meters) ---------- */
@@ -897,13 +916,13 @@ function makeCraft(kind){
 }
 
 /* camera */
-const CAMS = { wide:{ pos:[-160, 760, 880], tgt:[-40, 0, 0] }, near:{ pos:[-330, 200, 150], tgt:[-50, 55, 0] }, tower:{ pos:[72, ROOF+20, 78], tgt:[-35, ROOF+8, -8] } };
+const CAMS = { wide:{ pos:[-170, 780, 900], tgt:[-50, 0, 0] }, near:{ pos:[-380, 230, 200], tgt:[-60, 55, 0] }, tower:{ pos:[95, ROOF+24, 100], tgt:[-45, ROOF+6, -10] } };
 function setCam(mode, instant){
   if (!R) return;
   R.camMode = mode;
   document.querySelectorAll('[data-cam]').forEach(b => b.setAttribute('aria-pressed', b.dataset.cam===mode));
   if (mode==='follow') return;
-  const c = CAMS[mode];
+  const c = mode==='tower' ? (G && G.m && G.m.fatos.length > 1 ? { pos:[115, ROOF+32, 115], tgt:[-30, ROOF+5, 0] } : { pos:[105, ROOF+24, 25], tgt:[-30, ROOF+5, -40] }) : CAMS[mode];
   const to = { pos:new THREE.Vector3(...c.pos), tgt:new THREE.Vector3(...c.tgt) };
   if (instant){ R.camera.position.copy(to.pos); R.controls.target.copy(to.tgt); R.controls.update(); R.camAnim = null; return; }
   R.camAnim = { from:{ pos:R.camera.position.clone(), tgt:R.controls.target.clone() }, to, t:0 };
@@ -937,7 +956,7 @@ const EVENTS = {
     why:'기준을 넘으면 출발을 멈추고 접근기는 복행 · 대기시킵니다.', start(){ G.flags.gust = 18; }, apply(){ goAroundAll(); } },
   fod: { title:'FATO 이물질 발견', sev:'warn', desc:'CCTV에 FATO 위 비닐 조각이 보입니다.',
     opts:[['FATO 사용 중지, 접근기 대기, 점검 · 제거',2],['작업자를 불러 치우고 착륙은 계속',1],['다음 착륙 후에 치운다',0]],
-    why:'로터 하강풍이 이물질을 날립니다. 닫고 점검한 뒤 엽니다.', start(){ G.flags.fod = true; G.flags.fodAuto = 25; }, apply(){ goAroundAll(); G.flags.inspect = 8; log('FATO 점검 시작 (8초)', 'sys'); } },
+    why:'로터 하강풍이 이물질을 날립니다. 닫고 점검한 뒤 엽니다.', start(){ G.flags.fod = true; G.flags.fodF = 'F1'; G.flags.fodAuto = 25; this.desc = multiF() ? 'CCTV에 FATO 1 위 비닐 조각이 보입니다. FATO 2는 정상입니다.' : 'CCTV에 FATO 위 비닐 조각이 보입니다.'; }, apply(){ goAroundAll(x => x.fato === G.flags.fodF); G.flags.inspect = 8; log(`FATO ${fNum(G.flags.fodF)} 점검 시작 (8초)`, 'sys'); } },
   mayday: { title:'MAYDAY · 배터리 셀 과열', sev:'bad', desc:'',
     opts:[['비상 접수, 최우선 착륙 · 다른 기체 대기 · 소방 대기',2],['상황을 자세히 보고하라고 요청',0],['도착 순서대로 처리',0]],
     why:'비상기는 접수 즉시 최우선 착륙. 다른 기체는 대기, 소방은 대기합니다.',
@@ -969,7 +988,7 @@ let G = null, seq = 0;
 const byId = id => G.ac.find(a => a.id===id);
 function holdStart(side){ const c = W.HOLD[side]; return [c[0]+W.HR, c[1], c[2]]; }
 function newState(m){
-  G = { m, t:0, len:m.min*60, running:false, paused:false, score:0, ac:[], tr:[], stands:{A:null,B:null,C:null}, fire:{},
+  G = { m, t:0, len:m.min*60, running:false, paused:false, score:0, ac:[], tr:[], stands:{A:null,B:null,C:null,D:null,E:null,F:null}, fire:{},
     flags:{ gust:0, drone:0, fod:false, fodAuto:0, inspect:0, closed:0, sys:0, rescue:false },
     card:null, logs:[], sel:null, used:new Set(), stats:{ land:0, dep:0, park:0, viol:0, forced:0, emg:0, evOk:0, evTot:0, div:0 },
     incidents:[], schedule:[], nextSpawn: m.spawn ? 12 : 1e9, nextTransit: 8, nextVisual: 4, ended:false, assist:m.assist, goalsMetAt:null,
@@ -1054,23 +1073,30 @@ function spawnTransit(crossing){
 function enterHold(a){ a.st='holding'; a.ang=0; setReq(a,'land'); }
 function setReq(a, r){ a.req = r; a.reqT = G.t; }
 function clearReq(a){ if (a.req) a.wait += G.t - a.reqT; a.req = null; }
-function fatoReserved(except){ return G.ac.some(b => b!==except && (['approach','landed','taxi_out','lineup'].includes(b.st) || (b.st==='takeoff' && b.tw && b.tw.t < 1.8))); }
-function hazardNow(){ const f = G.flags; if (f.closed>0 || f.inspect>0) return 'FATO 폐쇄'; if (f.fod) return '이물질'; if (f.gust>0) return '돌풍'; if (f.drone>0) return '미확인 드론'; return null; }
+function fatoReserved(f, except){ return G.ac.some(b => b!==except && (!f || b.fato===f) && (['approach','landed','taxi_out','lineup'].includes(b.st) || (b.st==='takeoff' && b.tw && b.tw.t < 1.8))); }
+const multiF = () => G.m.fatos.length > 1;
+const fNum = f => f==='F2' ? 2 : 1;
+function fatoClosed(f){ return G.flags.closed > 0 || (G.flags.inspect > 0 && G.flags.fodF === f); }
+function freeFato(except){ return G.m.fatos.find(f => !fatoReserved(f, except) && !fatoClosed(f) && G.flags.fodF !== f) || null; }
+function landKey(f){ return multiF() ? 'land'+f : 'land'; }
+function taxiKey(f){ return multiF() ? 'taxi'+f : 'taxi'; }
+function keyFato(k){ const m = k.match(/^(?:land|taxi)(F\d)$/); return m ? m[1] : 'F1'; }
+function hazardNow(fid){ const f = G.flags; if (f.closed>0) return 'FATO 폐쇄'; if (f.fod && (!fid || f.fodF===fid)) return f.inspect>0 ? 'FATO 점검' : '이물질'; if (f.gust>0) return '돌풍'; if (f.drone>0) return '미확인 드론'; return null; }
 function emgWaiting(except){ return G.ac.some(b => b!==except && b.emg && ['inbound','holding','approach','goaround'].includes(b.st)); }
 function availStand(s){ return G.m.stands.includes(s) && !G.stands[s] && !G.fire[s]; }
-function freeStandCount(){ return ['A','B','C'].filter(availStand).length - G.ac.filter(b => b.st==='approach' || b.st==='landed').length; }
+function freeStandCount(){ return G.m.stands.filter(availStand).length - G.ac.filter(b => b.st==='approach' || b.st==='landed').length; }
 function goAround(a, quiet){
   a.st='goaround'; const hs = holdStart(a.hold);
   tween(a, [a.pos, [a.pos[0]-50, Math.max(a.pos[1], 95)+15, a.pos[2] + (a.hold==='N1'?-50:50)], hs], 5, () => enterHold(a));
   if (!quiet) log(`${a.cs}: 복행, ${a.hold} 대기`);
 }
 function goAroundAll(filter){ G.ac.filter(a => a.st==='approach' && !a.nordo && (!filter || filter(a))).forEach(a => goAround(a)); }
-function startApproach(a){ clearReq(a); a.st='approach'; tween(a, [a.pos, W.FINAL, [-70,58,0], W.FATO], 6.5, () => touchdown(a)); }
+function startApproach(a, f){ clearReq(a); a.fato = f || 'F1'; a.st='approach'; const P = W.FATOS[a.fato]; tween(a, [a.pos, W.FINALS[a.fato], [-100,58,P[2]], P], 6.5, () => touchdown(a)); }
 function touchdown(a){
-  if (fatoReserved(a)){ violation(a.nordo ? 'nordo' : 'occ_land', a, a.nordo ? 200 : 150); goAround(a); return; }
-  if (G.flags.closed>0 || G.flags.inspect>0){ violation('hazard_touch', a, 100); goAround(a); return; }
-  if (hazardNow()) violation('hazard_touch', a, 100);
-  a.st='landed'; a.pos = W.FATO.slice();
+  if (fatoReserved(a.fato, a)){ violation(a.nordo ? 'nordo' : 'occ_land', a, a.nordo ? 200 : 150); goAround(a); return; }
+  if (fatoClosed(a.fato)){ violation('hazard_touch', a, 100); goAround(a); return; }
+  if (hazardNow(a.fato)) violation('hazard_touch', a, 100);
+  a.st='landed'; a.pos = W.FATOS[a.fato].slice();
   const wasEmg = a.emg, wasNordo = a.nordo;
   const pts = wasEmg ? 150 : Math.max(40, Math.round(100 - 2*Math.max(0, a.wait-12)));
   G.stats.land++; if (wasEmg) G.stats.emg++;
@@ -1081,24 +1107,26 @@ function finishTurn(a){ a.st='ready'; a.kind='dep'; a.bat=100; a.wait=0; a.to = 
 
 /* checks: return null when OK, else [lessonKey, points, short reason] */
 function check(a, k){
-  if (a.nordo && ['land','hold','divert'].includes(k)) return ['nordo_cmd', 0, '응답 없음'];
-  if (k==='land'){
-    if (fatoReserved(a)) return ['occ_land',150,'FATO 점유'];
-    const hz = hazardNow(); if (hz) return ['hazard',100,hz];
+  if (a.nordo && (k.startsWith('land') || k==='hold' || k==='divert')) return ['nordo_cmd', 0, '응답 없음'];
+  if (k.startsWith('land')){
+    const fid = keyFato(k);
+    if (fatoReserved(fid, a)) return ['occ_land',150,'FATO '+fNum(fid)+' 점유'];
+    const hz = hazardNow(fid); if (hz) return ['hazard',100,hz];
     if (G.sectorBusy) return ['sector',100,'통과 교통'];
     if (!a.emg && emgWaiting(a)) return ['emg_first',100,'비상기 우선'];
     if (!a.emg && freeStandCount() <= 0) return ['no_stand',80,'빈 스탠드 없음'];
     if (G.sectorWarn) return ['warn_sector',0,'통과 교통 접근 중'];
     return null;
   }
-  if (k==='taxi'){
-    if (fatoReserved(a)) return ['occ_taxi',120,'FATO 점유'];
-    if (G.flags.closed>0 || G.flags.inspect>0 || G.flags.fod) return ['hazard',100,hazardNow()];
+  if (k.startsWith('taxi')){
+    const fid = keyFato(k);
+    if (fatoReserved(fid, a)) return ['occ_taxi',120,'FATO '+fNum(fid)+' 점유'];
+    if (fatoClosed(fid) || G.flags.fodF === fid) return ['hazard',100,hazardNow(fid)];
     return null;
   }
   if (k==='takeoff'){
-    if (G.ac.some(b => b.st==='approach')) return ['dep_vs_arr',150,'접근기 있음'];
-    const hz = hazardNow(); if (hz) return ['hazard',100,hz];
+    if (G.ac.some(b => b.st==='approach' && b.fato===a.fato)) return ['dep_vs_arr',150,'접근기 있음'];
+    const hz = hazardNow(a.fato); if (hz) return ['hazard',100,hz];
     if (G.sectorBusy) return ['sector',100,'통과 교통'];
     if (emgWaiting(a)) return ['emg_first',100,'비상기 우선'];
     if (G.flags.sys>0) return ['sys_dep',50,'시스템 장애'];
@@ -1109,10 +1137,10 @@ function check(a, k){
 function doCmd(a, k){
   if (!G.running || G.paused || !a) return;
   if (G.tutorial && !tutAllows(a, k)) return;
-  if (a.nordo && ['land','hold','divert'].includes(k)){ log(`${a.cs}: (응답 없음)`, 'sys'); return; }
+  if (a.nordo && (k.startsWith('land') || k==='hold' || k==='divert')){ log(`${a.cs}: (응답 없음)`, 'sys'); return; }
   const c = check(a, k);
   if (c && c[1] > 0){ violation(c[0], a, c[1]); refreshUI(true); return; }
-  if (k==='land' && a.st==='holding'){ log(`관제 → ${a.cs}: FATO 1 착륙 허가`, 'me'); startApproach(a); }
+  if (k.startsWith('land') && a.st==='holding'){ const fid = keyFato(k); log(`관제 → ${a.cs}: FATO ${fNum(fid)} 착륙 허가`, 'me'); startApproach(a, fid); }
   else if (k==='hold' && a.st==='approach'){ log(`관제 → ${a.cs}: 복행, ${a.hold} 대기`, 'me'); goAround(a, true); }
   else if (k==='divert' && ['holding','approach','inbound'].includes(a.st)){
     clearReq(a); const ok = a.emg || a.bat < 24 || G.flags.closed>0 || G.flags.inspect>0 || G.flags.gust>0 || G.flags.drone>0 || G.flags.fod; G.stats.div++;
@@ -1127,21 +1155,22 @@ function doCmd(a, k){
     const s = k.slice(5); if (!availStand(s)) return;
     clearReq(a); a.st='taxi_in'; a.stand=s; G.stands[s]=a.id; const sp = W.STAND[s];
     log(`관제 → ${a.cs}: 스탠드 ${s}로 이동`, 'me');
-    tween(a, [W.FATO, W.TAXI, [W.TAXI[0], ROOF+2, sp[2]], sp], 3.5, () => { a.st='turn'; a.turnMax = a.turn = rnd(12, 16); G.stats.park++; addScore(20); });
+    const FP = W.FATOS[a.fato||'F1']; tween(a, [FP, [W.TAXIX, ROOF+2, FP[2]], [W.TAXIX, ROOF+2, sp[2]], sp], 3.8, () => { a.st='turn'; a.turnMax = a.turn = rnd(12, 16); G.stats.park++; addScore(20); });
   }
   else if (k==='apron' && a.st==='landed'){
     if (G.ac.some(b => b.st==='apron' || b.st==='deboard')) return;
     clearReq(a); a.st='apron'; log(`관제 → ${a.cs}: 임시 주기장 이동, 승객 하기`, 'me');
-    tween(a, [W.FATO, [-20,ROOF+2,28], W.APRON], 3, () => { a.st='deboard'; a.turn = 8; G.stats.park++; });
+    const FP = W.FATOS[a.fato||'F1']; tween(a, [FP, [W.APRON[0], ROOF+2, FP[2]], W.APRON], 3, () => { a.st='deboard'; a.turn = 8; G.stats.park++; });
   }
-  else if (k==='taxi' && a.st==='ready'){
+  else if (k.startsWith('taxi') && a.st==='ready'){
+    const fid = keyFato(k); a.fato = fid; const FP = W.FATOS[fid];
     clearReq(a); a.st='taxi_out'; const sp = W.STAND[a.stand]; G.stands[a.stand] = null;
-    log(`관제 → ${a.cs}: 스탠드 ${a.stand}에서 FATO 1로 이동`, 'me');
-    tween(a, [sp, [W.TAXI[0], ROOF+2, sp[2]], W.TAXI, W.FATO], 3.5, () => { a.st='lineup'; setReq(a,'takeoff'); log(`${a.cs}: FATO 1, 이륙 준비 완료`); });
+    log(`관제 → ${a.cs}: 스탠드 ${a.stand}에서 FATO ${fNum(fid)}로 이동`, 'me');
+    tween(a, [sp, [W.TAXIX, ROOF+2, sp[2]], [W.TAXIX, ROOF+2, FP[2]], FP], 3.8, () => { a.st='lineup'; setReq(a,'takeoff'); log(`${a.cs}: FATO ${fNum(fid)}, 이륙 준비 완료`); });
   }
   else if (k==='takeoff' && a.st==='lineup'){
-    clearReq(a); a.st='takeoff'; log(`관제 → ${a.cs}: FATO 1 이륙 허가`, 'me');
-    tween(a, [W.FATO, [-20, 80, 0], W.CLIMB], 3.6, () => {
+    clearReq(a); a.st='takeoff'; log(`관제 → ${a.cs}: FATO ${fNum(a.fato)} 이륙 허가`, 'me'); const FP = W.FATOS[a.fato||'F1'];
+    tween(a, [FP, [FP[0], 80, FP[2]], [FP[0], 135, FP[2]]], 3.6, () => {
       const pts = Math.max(40, Math.round(100 - 2*Math.max(0, a.wait-12)));
       G.stats.dep++; addScore(pts); log(`${a.cs}: 이륙 · 회랑 인계 (${a.to}행) +${pts}`, 'good');
       a.st='enroute'; a.req=null; const dest = PORT(a.to); const route = [a.pos, [dest.pos[0]*0.4, CRUISE, dest.pos[2]*0.4], [dest.pos[0], CRUISE, dest.pos[2]]];
@@ -1193,8 +1222,8 @@ function update(dt){
   G.t += dt;
   const f = G.flags;
   ['gust','drone','closed','sys'].forEach(k => { if (f[k] > 0){ f[k] -= dt; if (f[k] <= 0){ f[k] = 0; log({gust:'돌풍 경보 해제',drone:'드론 이탈 확인',closed:'FATO 폐쇄 해제',sys:'시스템 복구'}[k], 'sys'); } } });
-  if (f.inspect > 0){ f.inspect -= dt; if (f.inspect <= 0){ f.inspect = 0; f.fod = false; log('점검 완료, FATO 사용 재개', 'sys'); } }
-  if (f.fod && f.inspect <= 0){ f.fodAuto -= dt; if (f.fodAuto <= 0){ f.fod = false; log('지상요원이 이물질 제거 (늦은 조치)', 'sys'); } }
+  if (f.inspect > 0){ f.inspect -= dt; if (f.inspect <= 0){ f.inspect = 0; f.fod = false; f.fodF = null; log('점검 완료, FATO 사용 재개', 'sys'); } }
+  if (f.fod && f.inspect <= 0){ f.fodAuto -= dt; if (f.fodAuto <= 0){ f.fod = false; f.fodF = null; log('지상요원이 이물질 제거 (늦은 조치)', 'sys'); } }
 
   G.schedule.forEach(s => { if (!s.done && G.t >= s.t){ s.done = true; if (s.spawn) spawnArrival(s.spawn); else { if (s.surprise) log('돌발 상황 발생!', 'bad'); triggerEvent(s.k); } } });
   if (G.card){ if (!G.card.answered && G.t >= G.card.deadline && !G.tutorial) resolveCard(-1, true); else if (G.card.answered && G.t >= G.card.hideAt){ G.card = null; renderCard(); } }
@@ -1224,7 +1253,7 @@ function update(dt){
   G.ac.slice().forEach(a => {
     if (a.tw) stepTween(a, dt);
     if (a.st==='holding'){ a.ang += dt*0.9; const c = W.HOLD[a.hold]; const nx = c[0] + Math.cos(a.ang)*W.HR, nz = c[2] + Math.sin(a.ang)*W.HR; a.heading = Math.atan2(nx-a.pos[0], nz-a.pos[2]); a.pos = [nx, c[1], nz];
-      if (a.nordo){ a.nordoT -= dt; if (a.nordoT <= 0){ log(`${a.cs}: (두절) 사전 절차대로 최종접근 시작`, 'sys'); startApproach(a); } } }
+      if (a.nordo){ a.nordoT -= dt; if (a.nordoT <= 0){ log(`${a.cs}: (두절) 사전 절차대로 최종접근 시작`, 'sys'); startApproach(a, 'F1'); } } }
     if (a.st==='turn' && !G.fire[a.stand]){ a.turn -= dt; if (a.turn <= 0) finishTurn(a); }
     if (a.st==='deboard'){ a.turn -= dt; if (a.turn <= 0){ log(`${a.cs}: 임시 주기장 승객 하기 완료`); removeAc(a); } }
     if (!G.tutorial && ['inbound','holding','approach','goaround'].includes(a.st)){
@@ -1259,23 +1288,25 @@ function sync3D(time){
     const moving = !!a.tw && AIR.concat(['enroute','takeoff']).includes(a.st); a.mesh.rotation.x = moving ? -0.06 : 0;
   });
   G.tr.forEach(t => { t.mesh.position.set(...t.pos); t.mesh.rotation.y = t.heading + Math.PI; t.mesh.rotation.x = -0.06; const ud = t.mesh.userData; ud.rotors.forEach((r,i) => r.rotation.y += 0.9*(i%2?1:-1)); ud.strobe.visible = blink(t.id); ud.status.color.setHex(0x8E9AA8); ud.status.emissive.setHex(0x8E9AA8); });
-  const closed = f.closed>0 || f.inspect>0, res = fatoReserved(null);
-  O.fatoLight.color.setHex(closed ? 0xFF4030 : res ? 0xFFB030 : 0x3CFF9A);
-  O.fatoTint.color.setHex(closed ? 0xA8402F : res ? 0xB8862F : 0x2F8F6A); O.fatoTint.opacity = closed ? 0.3 : res ? 0.14 : 0.0;
-  ['A','B','C'].forEach(s => { const st = O.stands[s]; const off = !G.m.stands.includes(s); const occ = G.stands[s] && byId(G.stands[s]);
-    st.mat.color.setHex(G.fire[s] ? 0xEF6A55 : off ? 0x56687E : occ ? 0x5AA6EE : 0x4CC38A); st.mat.opacity = off ? 0.3 : 0.13; st.off.visible = off;
+  const closed = f.closed>0 || f.inspect>0;
+  Object.entries(O.fato).forEach(([fid, F]) => { const built = G.m.fatos.includes(fid); const c = fatoClosed(fid) || f.fodF===fid, res = fatoReserved(fid, null);
+    F.cover.visible = !built; F.coverTxt.visible = !built; F.lights.forEach(l => l.visible = built); F.lbl.visible = built && R.hud;
+    F.light.color.setHex(c ? 0xFF4030 : res ? 0xFFB030 : 0x3CFF9A); F.tint.color.setHex(c ? 0xA8402F : res ? 0xB8862F : 0x2F8F6A); F.tint.opacity = !built ? 0 : c ? 0.3 : res ? 0.14 : 0.0; });
+  Object.keys(O.stands).forEach(s => { const st = O.stands[s]; const built = G.m.cap.includes(s); const off = built && !G.m.stands.includes(s); const occ = G.stands[s] && byId(G.stands[s]);
+    st.cover.visible = !built; st.fut.visible = !built; st.charger.visible = built; st.screen.visible = built;
+    st.mat.color.setHex(G.fire[s] ? 0xEF6A55 : off ? 0x56687E : occ ? 0x5AA6EE : 0x4CC38A); st.mat.opacity = !built ? 0 : off ? 0.3 : 0.13; st.off.visible = off;
     st.screen.material.color.setHex(G.fire[s] ? 0xFF3A2A : occ && occ.st==='turn' ? 0x4CC38A : 0x4FA3FF); });
   const showSec = !!G.m.transit && R.hud; [O.sector, O.sectorEdge, O.transitLine, O.transitLabel].forEach(o => o.visible = showSec);
   const sc = G.sectorBusy ? 0xEF6A55 : G.sectorWarn ? 0xF2A93B : 0x4CC38A;
   O.sectorMat.color.setHex(sc); O.sectorMat.opacity = G.sectorBusy ? 0.15 : G.sectorWarn ? 0.1 : 0.035; O.sectorEdge.material.color.setHex(sc);
-  O.final.material.color.setHex(closed || hazardNow() || G.sectorBusy ? 0xEF6A55 : G.sectorWarn ? 0xF2A93B : 0x4CC38A);
-  O.fod.visible = !!f.fod;
+  Object.entries(O.finals).forEach(([fid, L]) => { L.visible = R.hud && G.m.fatos.includes(fid); L.material.color.setHex(fatoClosed(fid) || hazardNow(fid) || G.sectorBusy ? 0xEF6A55 : G.sectorWarn ? 0xF2A93B : 0x4CC38A); });
+  O.fod.visible = !!f.fod; if (f.fodF){ const P = W.FATOS[f.fodF]; O.fod.position.set(P[0], 0, P[2]); }
   O.gust.visible = f.gust > 0; if (O.gust.visible) O.gust.children.forEach((g,i) => { g.position.x += 4 + (i%3); if (g.position.x > 170) g.position.x = -230; });
   O.sock.rotation.y = 0.5 + Math.sin(time*(f.gust>0 ? 7 : 1.3)) * (f.gust>0 ? 0.3 : 0.1); O.sock.rotation.z = f.gust>0 ? Math.sin(time*11)*0.05 : -0.35;
   const fireS = Object.keys(G.fire)[0];
   O.fire.visible = !!fireS; if (fireS){ const p = W.STAND[fireS]; O.fire.position.set(p[0], ROOF, p[2]); const k = 1 + Math.sin(time*14)*0.12; O.flame.scale.set(k, 1 + Math.sin(time*9)*0.22, k); O.fireLight.intensity = 2.4 + Math.sin(time*11)*0.8; O.fireGlow.scale.setScalar(30 + Math.sin(time*13)*4);
     O.smoke.forEach((sm,i) => { const ph = (time*0.35 + i/6) % 1; sm.position.set(Math.sin(i*1.7)*3 + ph*12, 12 + ph*70, Math.cos(i*1.3)*3); sm.scale.setScalar(0.5 + ph*2.2); sm.material.opacity = 0.55*(1-ph); }); }
-  O.drone.visible = f.drone > 0; if (O.drone.visible){ O.drone.position.set(-150 + Math.sin(time*0.6)*60, 92 + Math.sin(time*1.7)*6, Math.sin(time*1.2)*45); O.droneRing.scale.setScalar(1 + Math.sin(time*6)*0.12); O.drone.userData.rotors.forEach(r => r.rotation.y += 1.1); O.drone.userData.strobe.visible = Math.sin(time*9) > 0.6; }
+  O.drone.visible = f.drone > 0; if (O.drone.visible){ O.drone.position.set(-175 + Math.sin(time*0.6)*60, 92 + Math.sin(time*1.7)*6, Math.sin(time*1.2)*60); O.droneRing.scale.setScalar(1 + Math.sin(time*6)*0.12); O.drone.userData.rotors.forEach(r => r.rotation.y += 1.1); O.drone.userData.strobe.visible = Math.sin(time*9) > 0.6; }
   O.truck.visible = !!(f.rescue && G.ac.some(a => a.emg)); if (O.truck.visible){ const on = Math.sin(time*10) > 0; O.truckLights[0].visible = on; O.truckLights[1].visible = !on; }
   O.beaconMat.opacity = Math.sin(time*2.6) > 0.2 ? 1 : 0.12;
 }
@@ -1294,13 +1325,13 @@ const ST_TXT = { inbound:'진입 중', holding:'대기 선회', approach:'최종
 const REQ_TXT = { land:'착륙 요청', stand:'스탠드 요청', taxi:'지상이동 요청', takeoff:'이륙 요청' };
 function kindTag(a){ if (a.emg) return '<span class="tag emg">비상</span>'; if (a.nordo) return '<span class="tag nordo">두절</span>'; return a.kind==='dep' ? '<span class="tag dep">출발</span>' : '<span class="tag arr">도착</span>'; }
 function actionsFor(a){
-  const L = [], add = (k, label, cls) => { const c = (k==='land'||k==='taxi'||k==='takeoff') ? check(a, k) : null; L.push({ k, label, cls, warn: c && G.assist ? c[2] : '' }); };
+  const L = [], add = (k, label, cls) => { const c = (k.startsWith('land')||k.startsWith('taxi')||k==='takeoff') ? check(a, k) : null; L.push({ k, label, cls, warn: c && G.assist ? c[2] : '' }); };
   if (a.nordo) return L;
-  if (a.st==='holding'){ add('land','착륙 허가','go'); add('divert','전환','away'); }
+  if (a.st==='holding'){ if (multiF()) G.m.fatos.forEach(fid => add('land'+fid, 'FATO '+fNum(fid)+' 착륙', 'go')); else add('land','착륙 허가','go'); add('divert','전환','away'); }
   else if (a.st==='inbound'){ add('divert','전환','away'); }
   else if (a.st==='approach'){ add('hold','복행 · 대기','stop'); }
-  else if (a.st==='landed'){ const fs = ['A','B','C'].filter(availStand); fs.forEach(s => add('stand'+s, '스탠드 '+s, 'go')); if (!fs.length) add('apron','임시 주기장','stop'); }
-  else if (a.st==='ready'){ add('taxi','지상이동','go'); }
+  else if (a.st==='landed'){ const fs = G.m.stands.filter(availStand); fs.forEach(s => add('stand'+s, '스탠드 '+s, 'go')); if (!fs.length) add('apron','임시 주기장','stop'); }
+  else if (a.st==='ready'){ if (multiF()) G.m.fatos.forEach(fid => add('taxi'+fid, 'FATO '+fNum(fid)+'로 이동', 'go')); else add('taxi','지상이동','go'); }
   else if (a.st==='lineup'){ add('takeoff','이륙 허가','go'); }
   return L;
 }
@@ -1363,13 +1394,15 @@ function renderBoard(){
   const m = G.m, s = G.stats;
   if (G.tutorial) $('#goals').innerHTML = `<p class="noone">연습 중입니다. 미션 시작 후 목표(${goalText(m)})를 집계합니다.</p>`; else $('#goals').innerHTML = Object.entries(m.goals).map(([k,v]) => { const cur = k==='ev' ? s.evOk : s[k]; const done = cur >= v; return `<div class="g ${done?'done':''}"><span>${GOAL_TXT[k]}</span><span class="mono">${Math.min(cur,v)} / ${v}</span><div class="bar"><i style="width:${Math.min(100, cur/v*100)}%"></i></div></div>`; }).join('')
     + `<div class="g"><span>위반 허용</span><span class="mono" style="color:${s.viol?'var(--red)':'inherit'}">${s.viol} / ${m.limit}</span></div>`;
-  const f = G.flags, closed = f.closed>0 || f.inspect>0, res = fatoReserved(null);
-  const fe = $('#s-fato'); fe.textContent = closed ? (f.inspect>0 ? `점검 중 ${Math.ceil(f.inspect)}초` : `폐쇄 ${Math.ceil(f.closed)}초`) : f.fod ? '이물질 발견' : res ? '점유' : '사용 가능'; fe.className = 'v ' + (closed||f.fod ? 'bad' : res ? 'warn' : 'ok');
+  const f = G.flags;
+  const fst = fid => fatoClosed(fid) ? (f.closed>0 ? `폐쇄 ${Math.ceil(f.closed)}초` : `점검 ${Math.ceil(f.inspect)}초`) : f.fodF===fid ? '이물질' : fatoReserved(fid, null) ? '점유' : '사용 가능';
+  const fe = $('#s-fato'); const sts = m.fatos.map(fid => (multiF() ? fNum(fid)+': ' : '') + fst(fid)); fe.textContent = sts.join(' · ');
+  fe.className = 'v ' + (m.fatos.every(fid => fatoClosed(fid) || f.fodF===fid) ? 'bad' : m.fatos.some(fid => fatoClosed(fid) || f.fodF===fid || fatoReserved(fid, null)) ? 'warn' : 'ok');
   const we = $('#s-wind'); we.textContent = f.gust>0 ? '260° 18kt · 돌풍 28kt' : '260° 08kt'; we.className = 'v ' + (f.gust>0 ? 'bad' : 'ok');
   $('#s-sector-row').hidden = !m.transit;
   const se = $('#s-sector'); se.textContent = G.sectorBusy ? '통과 교통 통과 중' : G.sectorWarn ? '통과 교통 접근' : '비어 있음'; se.className = 'v ' + (G.sectorBusy ? 'bad' : G.sectorWarn ? 'warn' : 'ok');
   const sy = $('#s-sys'); sy.textContent = f.sys>0 ? `장애 · ${Math.ceil(f.sys)}초` : '정상'; sy.className = 'v ' + (f.sys>0 ? 'bad' : 'ok');
-  $('#s-stands').innerHTML = ['A','B','C'].map(st => { const off = !m.stands.includes(st), fire = G.fire[st], a = G.stands[st] && byId(G.stands[st]);
+  $('#s-stands').innerHTML = m.cap.map(st => { const off = !m.stands.includes(st), fire = G.fire[st], a = G.stands[st] && byId(G.stands[st]);
     const txt = off ? '정비 중' : fire ? '화재' : a ? (a.st==='turn' ? `${a.cs} · ${Math.ceil(a.turn)}초` : a.st==='ready' ? `${a.cs} · 출발 대기` : `${a.cs} · 이동`) : '비어 있음';
     return `<div class="stand ${off?'off':fire?'fire':a?'busy':''}"><b>${st}</b>${txt}</div>`; }).join('');
   // top
@@ -1388,20 +1421,21 @@ function computeHint(){
   const appr = G.ac.find(a => a.st==='approach');
   if (appr && (hazardNow() || G.sectorBusy || G.sectorWarn)) return [`<b>${appr.cs}</b>가 최종접근 중입니다. ${G.sectorWarn||G.sectorBusy ? '통과 교통이 다가옵니다.' : hazardNow()+' 상황입니다.'} <b>복행 · 대기</b>를 지시하세요.`, 'bad', { id:appr.id, k:'hold' }];
   const emg = G.ac.find(a => a.emg && a.st==='holding');
-  if (emg) return [`비상기 <b>${emg.cs}</b>를 최우선으로 착륙시키세요.${hazardNow() ? ' ('+hazardNow()+' 해제 즉시)' : ''}`, 'bad', check(emg,'land') ? null : { id:emg.id, k:'land' }];
+  if (emg) return [`비상기 <b>${emg.cs}</b>를 최우선으로 착륙시키세요.${hazardNow() ? ' ('+hazardNow()+' 해제 즉시)' : ''}`, 'bad', (() => { const k = landKey(freeFato(emg) || 'F1'); return check(emg,k) ? null : { id:emg.id, k }; })()];
   const nordo = G.ac.find(a => a.nordo && a.st==='holding');
   if (nordo) return [`두절 기체 <b>${nordo.cs}</b>가 ${Math.ceil(nordo.nordoT)}초 뒤 스스로 접근합니다. FATO를 비워 두고 다른 허가를 미루세요.`, 'warn'];
   const landed = G.ac.find(a => a.st==='landed');
-  if (landed){ const fs = ['A','B','C'].find(availStand); return [`<b>${landed.cs}</b>가 FATO 위에 있습니다. <b>${fs ? '스탠드 '+fs : '임시 주기장'}</b>으로 보내 FATO를 비우세요.`, '', { id:landed.id, k: fs ? 'stand'+fs : 'apron' }]; }
+  if (landed){ const fs = G.m.stands.find(availStand); return [`<b>${landed.cs}</b>가 FATO 위에 있습니다. <b>${fs ? '스탠드 '+fs : '임시 주기장'}</b>으로 보내 FATO를 비우세요.`, '', { id:landed.id, k: fs ? 'stand'+fs : 'apron' }]; }
   if (hazardNow()) return [`<b>${hazardNow()}</b> 중입니다. 이착륙을 멈추고 기다리세요.`, 'warn'];
   if (G.sectorBusy || G.sectorWarn) return ['통과 교통이 최종접근 구역을 지나갑니다. 새 착륙 · 이륙 허가를 보류하세요.', 'warn'];
   const lu = G.ac.find(a => a.st==='lineup');
   if (lu && !check(lu,'takeoff')) return [`<b>${lu.cs}</b> <b>이륙 허가</b>를 낼 수 있습니다.`, '', { id:lu.id, k:'takeoff' }];
   const holds = G.ac.filter(a => a.st==='holding' && !a.nordo).sort((x,y) => x.bat - y.bat);
-  if (holds.length){ const h = holds[0]; const c = check(h,'land'); if (!c) return [`<b>${h.cs}</b>(배터리 ${Math.round(h.bat)}%) <b>착륙 허가</b>를 낼 수 있습니다.`, '', { id:h.id, k:'land' }];
-    if (c[0]==='no_stand'){ const r = G.ac.find(a => a.st==='ready'); return [`빈 스탠드가 없습니다. ${r ? '<b>'+r.cs+'</b>를 먼저 출발시켜 스탠드를 비우세요.' : '턴어라운드가 끝나길 기다리세요.'}`, 'warn', r && !check(r,'taxi') ? { id:r.id, k:'taxi' } : null]; } }
+  if (holds.length){ const h = holds[0]; const hf = freeFato(h) || 'F1', hk = landKey(hf); const c = check(h,hk); if (!c) return [`<b>${h.cs}</b>(배터리 ${Math.round(h.bat)}%) <b>${multiF() ? 'FATO '+fNum(hf)+' ' : ''}착륙 허가</b>를 낼 수 있습니다.`, '', { id:h.id, k:hk }];
+    if (c[0]==='no_stand'){ const r = G.ac.find(a => a.st==='ready'); return [`빈 스탠드가 없습니다. ${r ? '<b>'+r.cs+'</b>를 먼저 출발시켜 스탠드를 비우세요.' : '턴어라운드가 끝나길 기다리세요.'}`, 'warn', r && !check(r, taxiKey(freeFato(r)||'F1')) ? { id:r.id, k:taxiKey(freeFato(r)||'F1') } : null]; } }
   const rd = G.ac.find(a => a.st==='ready');
-  if (rd && !check(rd,'taxi') && !G.ac.some(a => ['approach'].includes(a.st))) return [`<b>${rd.cs}</b>를 <b>지상이동</b>으로 FATO에 올릴 수 있습니다.`, '', { id:rd.id, k:'taxi' }];
+  const rf = rd ? (freeFato(rd) || 'F1') : 'F1';
+  if (rd && !check(rd, taxiKey(rf)) && !G.ac.some(a => a.st==='approach' && a.fato===rf)) return [`<b>${rd.cs}</b>를 <b>지상이동</b>으로 FATO ${fNum(rf)}에 올릴 수 있습니다.`, '', { id:rd.id, k:taxiKey(rf) }];
   return ['요청을 기다리는 중입니다. 광역 화면에서 들어오는 기체를 확인하세요.', ''];
 }
 let COACH = null;
@@ -1512,7 +1546,7 @@ function endMission(ok, why){
 /* =========================================================
    INTERACTIVE PRACTICE (in-simulator walkthrough)
    ========================================================= */
-const FATO_P = () => W.FATO, SEC_P = [-150, 110, 0];
+const FATO_P = () => W.FATOS.F1, SEC_P = [-175, 110, 0];
 const csOf = n => { const a = tref(n); return a ? a.cs : ''; };
 const batOf = n => { const a = tref(n); return a ? Math.round(a.bat) : 0; };
 const LAND_STEPS = (n, stand) => [
@@ -1564,6 +1598,7 @@ const TUT = {
     ...LAND_STEPS('A1', 'A')
   ],
   6: [
+    { cam:'tower', tgt:{ pos:W.STAND.D }, say:'버티포트가 확장되어 <b>스탠드 D</b>가 열렸습니다. 이제 스탠드 4개로 운영하고, 드론도 더 자주 들어옵니다.', wait:'next' },
     { enter:T => { T.arr('A1', '김포', { hold:true, bat:60 }); T.transit(0.1); }, cam:'wide', tgt:{ ac:'X1' }, say:'광역 화면입니다. 회색 <b>통과 드론</b>이 김포–잠실 회랑을 따라 우리 최종접근 구역 쪽으로 옵니다. 우리 관할이 아니라 지시할 수 없습니다.', wait:'next' },
     { tgt:{ pos:SEC_P }, say:'최종접근 구역이 <b>노란색</b>이면 통과 드론이 다가오는 중, <b>빨간색</b>이면 구역 안에 있습니다.', wait:{ fn:() => G.sectorWarn || G.sectorBusy }, speed:3 },
     { tgt:{ pos:SEC_P }, say:'이때는 착륙 · 이륙 허가를 보류하고 지나가길 기다립니다.', wait:{ fn:() => G.tr.filter(t => t.crossing).every(t => t.passed) }, speed:3 },
@@ -1597,6 +1632,12 @@ const TUT = {
     { tgt:{ ac:'A1' }, say:'착륙하면 전화로 교신이 복구됩니다. <b>스탠드 A</b>로.', wait:{ cmd:'standA', ref:'A1' } }
   ],
   11: [
+    { cam:'tower', tgt:{ pos:W.FATOS.F2 }, say:'버티포트가 다시 확장되어 <b>FATO가 2개</b>, 스탠드가 5개가 됐습니다. 두 FATO를 동시에 쓸 수 있습니다.', wait:'next' },
+    { enter:T => { T.arr('B1', '김포', { hold:true, bat:60 }); T.arr('B2', '여의도', { hold:true, bat:55 }); }, cam:'near', tgt:{ ac:'B1' }, say:() => `착륙 버튼이 FATO별로 나뉩니다. <b>${csOf('B1')}</b>에게 <b>FATO 1 착륙</b>.`, wait:{ cmd:'landF1', ref:'B1' } },
+    { tgt:{ ac:'B2' }, say:() => `FATO 1이 점유 중이어도 FATO 2는 비어 있습니다. <b>${csOf('B2')}</b>에게 <b>FATO 2 착륙</b>.`, wait:{ cmd:'landF2', ref:'B2' } },
+    { cam:'tower', tgt:{ pos:W.FATOS.F2 }, say:'두 드론이 각자의 FATO로 내립니다. 같은 FATO에는 한 번에 한 대뿐입니다.', wait:{ st:'landed', ref:'B2' }, speed:2 },
+    { tgt:{ ac:'B1' }, say:'<b>스탠드 A</b>로 보내세요.', wait:{ cmd:'standA', ref:'B1' } },
+    { tgt:{ ac:'B2' }, say:'<b>스탠드 B</b>로 보내세요. 출발기도 <b>FATO 1로 이동 / FATO 2로 이동</b> 중에서 비어 있는 쪽을 고릅니다.', wait:{ cmd:'standB', ref:'B2' } },
     { enter:T => { T.arr('A1', '김포', { hold:true, bat:65 }); T.event('drone'); }, cam:'near', tgt:{ ui:'#cardbox' }, say:'최종접근 경로 근처에 <b>미확인 드론</b>이 탐지됐습니다. <b>상황 카드</b>에서 올바른 조치를 고르세요.', wait:{ card:true } },
     { tgt:{ pos:[-150, 92, 0] }, say:'빨간 고리가 미확인 드론입니다. 머무는 동안 이착륙하지 않고, 경찰 신고와 위치 기록을 합니다. 무력화는 권한 기관의 일입니다.', wait:{ fn:() => G.flags.drone <= 0 }, speed:2.5 },
     { tgt:{ ac:'A1' }, say:'드론 이탈이 확인됐습니다. <b>착륙 허가</b>.', wait:{ cmd:'land', ref:'A1' } }
@@ -1609,6 +1650,7 @@ const TUT = {
     { cam:'wide', tgt:{ ac:'A1' }, say:'다른 버티포트로 날아갑니다.', wait:'next' }
   ],
   13: [
+    { cam:'tower', tgt:{ pos:W.STAND.F }, say:'스탠드 F까지 열려 <b>FATO 2개 · 스탠드 6개</b>로 운영합니다. 드론도 10초마다 들어옵니다.', wait:'next' },
     { enter:T => { T.arr('A1', '김포', { hold:true, bat:60 }); T.dep('D1', 'B', 0.05); T.event('sys'); }, cam:'near', tgt:{ ui:'#cardbox' }, say:'<b>관리시스템 장애</b>입니다. <b>상황 카드</b>에서 올바른 조치를 고르세요.', wait:{ card:true } },
     { tgt:{ ui:'#queue' }, say:'배터리 · 대기시간 정보가 <b>--</b>로 바뀌었습니다. 출발은 보류하고 공중 드론부터 처리합니다.', wait:'next' },
     { tgt:{ ac:'A1' }, say:'공중의 드론부터 <b>착륙 허가</b>.', wait:{ cmd:'land', ref:'A1' } },
@@ -1675,7 +1717,7 @@ function nextStep(){
 function tutCheck(){
   const st = T && T.steps[T.i]; if (!st || st.final || st.wait === 'next') return;
   const w = st.wait; let ok = false;
-  if (w.cmd){ const a = tref(w.ref); ok = !!(a && T.cmdDone && T.cmdDone.id === a.id && T.cmdDone.k === w.cmd); }
+  if (w.cmd){ const a = tref(w.ref); ok = !!(a && T.cmdDone && T.cmdDone.id === a.id && (T.cmdDone.k === w.cmd || (/^(land|taxi)$/.test(w.cmd) && T.cmdDone.k.startsWith(w.cmd)))); }
   else if (w.st){ const a = tref(w.ref); ok = !!(a && a.st === w.st); }
   else if (w.card) ok = !!(G.card && G.card.answered);
   else if (w.fn) ok = !!w.fn();
@@ -1683,7 +1725,9 @@ function tutCheck(){
 }
 function tutCoach(){
   const st = T && T.steps[T.i]; const w = st && st.wait;
-  if (!w || !w.cmd) return null; const a = tref(w.ref); return a ? { id:a.id, k:w.cmd } : null;
+  if (!w || !w.cmd) return null; const a = tref(w.ref); if (!a) return null;
+  let k = w.cmd; if (multiF() && (k === 'land' || k === 'taxi')) { const fid = freeFato(a) || 'F1'; k = k === 'land' ? landKey(fid) : taxiKey(fid); }
+  return { id:a.id, k };
 }
 function tutAllows(a, k){
   const c = tutCoach();
