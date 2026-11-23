@@ -264,6 +264,7 @@ table.rec .ok { color: var(--green); font-weight: 700; } table.rec .ng { color: 
             <button class="btn primary big" id="m-start">미션 시작</button>
             <button class="btn big" id="m-continue" hidden></button>
             <button class="btn big" id="m-list" aria-expanded="false">미션 선택</button>
+            <button class="btn big" id="m-test">테스트 단계 (10분)</button>
             <button class="btn big" id="m-rec" aria-expanded="false">기록 보기</button>
           </div>
           <p class="prog-line"><span class="label">진행</span> <span class="prog" id="progress">0 / 15</span></p>
@@ -277,7 +278,7 @@ table.rec .ok { color: var(--green); font-weight: 700; } table.rec .ng { color: 
       <div id="reclist" class="panel" hidden>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><p class="label" id="rec-title">관제사 기록</p><button class="btn" id="rec-refresh" style="font-size:12px;padding:4px 10px">새로고침</button></div>
         <p class="rec-note" id="rec-note"></p>
-        <div class="tblwrap"><table class="rec"><thead><tr><th>순위</th><th>이름</th><th>최고 단계</th><th>별</th><th>최고 점수 합</th><th>도전</th><th>최근 기록</th></tr></thead><tbody id="rec-body"></tbody></table></div>
+        <div class="tblwrap"><table class="rec"><thead><tr><th>순위</th><th>이름</th><th>최고 단계</th><th>테스트</th><th>별</th><th>최고 점수 합</th><th>도전</th><th>최근 기록</th></tr></thead><tbody id="rec-body"></tbody></table></div>
         <p class="label" style="margin-top:14px">내 단계별 결과 <span id="rec-me"></span></p>
         <div class="tblwrap"><table class="rec"><thead><tr><th>미션</th><th>결과</th><th>별</th><th>점수</th><th>위반</th><th>도전 횟수</th></tr></thead><tbody id="rec-mine"></tbody></table></div>
       </div>
@@ -297,6 +298,7 @@ table.rec .ok { color: var(--green); font-weight: 700; } table.rec .ng { color: 
         <div class="r">
           <div class="kv"><span class="label">남은 시간</span><span class="v big" id="g-clock">0:00</span></div>
           <div class="kv"><span class="label">점수</span><span class="v" id="g-score">0</span></div>
+          <div class="kv" id="g-levelbox" hidden><span class="label">난이도</span><span class="v" id="g-level">Lv.1</span></div>
           <div class="kv"><span class="label">위반</span><span class="v" id="g-viol">0</span></div>
           <label class="switch"><input type="checkbox" id="g-assist"> 가이드</label>
           <button class="btn" id="g-sound" style="padding:6px 12px" aria-pressed="true">소리 켜짐</button>
@@ -456,6 +458,20 @@ const FINAL_GOALS = { 3:{ land:5, dep:4 }, 4:{ land:7, dep:3 }, 5:{ land:6, dep:
 MISSIONS.forEach(m => { const g = FINAL_GOALS[m.id]; if (g) m.goals = Object.assign({}, g, m.goals.ev ? { ev:m.goals.ev } : {}); });
 const SURPRISE = { 9:{ n:1, p:0.6 }, 10:{ n:1, p:0.6 }, 11:{ n:1, p:1 }, 12:{ n:1, p:1 }, 13:{ n:2, p:0.8 }, 14:{ n:1, p:1 } };
 MISSIONS.forEach(m => { if (SURPRISE[m.id] || m.events === 'random') m.surprise = true; });
+/* 테스트 단계: 15단계 버티포트로 10분, 1분마다 난이도 상승 (9분 무렵이 고비) */
+const TEST_LEVELS = [ // [도착 간격(초), 공중 동시 최대, 배터리 최소, 배터리 최대, 통과 교통 간격(초)]
+  [13, 3, 55, 78, 0], [11, 3, 52, 74, 34], [10, 4, 48, 70, 30], [9, 4, 45, 66, 27], [8.5, 5, 44, 64, 24],
+  [7.5, 5, 41, 61, 22], [6.8, 5, 39, 58, 19], [6, 6, 36, 55, 17], [5, 7, 31, 49, 15], [4.4, 8, 27, 43, 13] ];
+const TEST_EVENTS = [70, 140, 200, 250, 295, 335, 370, 400, 428, 452, 474, 494, 512, 528, 543, 557, 570, 582, 593];
+const TEST_M = { id:16, tier:4, test:true, title:'테스트 단계', skill:'종합 평가 · 10분', min:10, cam:'wide', assist:false,
+  fatos:['F1','F2'], cap:'ABCDEF'.split(''), stands:'ABCDEF'.split(''), goals:{}, limit:5,
+  init:[{s:'A',turn:10},{s:'B',turn:20},{s:'C',turn:30}], script:[{t:3,o:'김포'},{t:7,o:'잠실'}],
+  spawn:{ every:13, max:3, bat:[55,78] }, transit:true, events:[],
+  story:'15단계와 같은 버티포트(FATO 2개 · 스탠드 6개)를 10분 동안 운영합니다. 1분마다 난이도가 오르고, 9분 무렵이 가장 어렵습니다.',
+  guide:['10분을 버티면 통과입니다. 위반 6회 이상 또는 강제 착륙 1회면 그 시점에 종료됩니다.', '1분마다 난이도가 오릅니다: 드론이 더 자주, 배터리가 더 적은 채로 들어오고 돌발 상황도 잦아집니다.', '배터리가 낮은 드론은 늦기 전에 내리거나 전환하세요. 공중 드론이 쌓이면 강제 착륙으로 끝납니다.', '공중 우선 · 배터리 낮은 순 · 스탠드 먼저 확보 · 위험 상황 중 이착륙 보류 · 비상기 최우선.'],
+  tip:'버틴 시간과 점수가 기록됩니다.' };
+const testLevel = t => Math.min(10, Math.floor(t / 60) + 1);
+function startTest(){ startTutorial(JSON.parse(JSON.stringify(TEST_M))); }
 const TIER_NAME = { 1:['기초 운영','착륙 · 출발 · 순서 · 스탠드'], 2:['상황 대응 입문','광역 교통과 단일 상황'], 3:['고급 상황 · 종합','복합 상황과 최종 평가'] };
 const GOAL_TXT = { park:'스탠드 배정', land:'착륙', dep:'출발', emg:'비상기 착륙', ev:'상황 카드 올바른 조치' };
 
@@ -483,11 +499,12 @@ function aggregate(rows){
   const by = {};
   rows.forEach(r => {
     const n = cleanName(r.name); if (!n) return;
-    const u = by[n] || (by[n] = { name:n, best:0, stars:{}, score:{}, tries:0, last:0 });
+    const u = by[n] || (by[n] = { name:n, best:0, stars:{}, score:{}, tries:0, last:0, test:0, testOk:false });
     u.tries++; const t = +new Date(r.time) || 0; if (t > u.last) u.last = t;
+    if (+r.mission === 16){ u.test = Math.max(u.test, +r.secs || 0); if (r.ok) u.testOk = true; return; }
     if (r.ok){ const m = +r.mission || 0; if (m > u.best) u.best = m; u.stars[m] = Math.max(u.stars[m] || 0, +r.stars || 0); u.score[m] = Math.max(u.score[m] || 0, +r.score || 0); }
   });
-  return Object.values(by).map(u => ({ name:u.name, best:u.best, stars:Object.values(u.stars).reduce((a,b) => a+b, 0), score:Object.values(u.score).reduce((a,b) => a+b, 0), tries:u.tries, last:u.last }))
+  return Object.values(by).map(u => ({ name:u.name, best:u.best, test:u.test, testOk:u.testOk, stars:Object.values(u.stars).reduce((a,b) => a+b, 0), score:Object.values(u.score).reduce((a,b) => a+b, 0), tries:u.tries, last:u.last }))
     .sort((a,b) => b.best - a.best || b.stars - a.stars || b.score - a.score);
 }
 async function loadBoard(){
@@ -499,12 +516,12 @@ async function loadBoard(){
 }
 const fmtDate = t => { if (!t) return '-'; const d = new Date(t); return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; };
 async function renderRecords(){
-  $('#rec-body').innerHTML = '<tr><td colspan="7" class="noone">불러오는 중…</td></tr>';
+  $('#rec-body').innerHTML = '<tr><td colspan="8" class="noone">불러오는 중…</td></tr>';
   const { rows, shared, failed } = await loadBoard();
   $('#rec-title').textContent = shared ? '전체 관제사 기록' : '이 기기의 관제사 기록';
   $('#rec-note').textContent = shared ? '모든 사용자의 결과가 모입니다. 최고 단계는 성공한 가장 높은 미션입니다.' : failed ? '전체 기록 서버에 연결하지 못해 이 기기 기록만 보여 줍니다.' : '이 기기에서 플레이한 기록입니다. 전체 사용자 기록은 기록 서버를 연결하면 모입니다.';
   const list = aggregate(rows);
-  $('#rec-body').innerHTML = list.length ? list.map((u,i) => `<tr class="${u.name===USER?'me':''}"><td>${i+1}</td><td>${esc(u.name)}</td><td>${u.best ? '미션 '+u.best : '-'}</td><td>★ ${u.stars}</td><td>${u.score}</td><td>${u.tries}</td><td>${fmtDate(u.last)}</td></tr>`).join('') : '<tr><td colspan="7" class="noone">아직 기록이 없습니다.</td></tr>';
+  $('#rec-body').innerHTML = list.length ? list.map((u,i) => `<tr class="${u.name===USER?'me':''}"><td>${i+1}</td><td>${esc(u.name)}</td><td>${u.best ? '미션 '+u.best : '-'}</td><td>${u.testOk ? '<span class="ok">통과</span>' : u.test ? fmt(u.test) : '-'}</td><td>★ ${u.stars}</td><td>${u.score}</td><td>${u.tries}</td><td>${fmtDate(u.last)}</td></tr>`).join('') : '<tr><td colspan="8" class="noone">아직 기록이 없습니다.</td></tr>';
   const mine = rows.filter(r => cleanName(r.name) === USER);
   $('#rec-me').textContent = USER ? `· ${USER}` : '';
   $('#rec-mine').innerHTML = MISSIONS.map(m => { const rs = mine.filter(r => +r.mission === m.id); if (!rs.length) return ''; const okR = rs.filter(r => r.ok);
@@ -558,7 +575,8 @@ const SFX = (() => {
     bad(t){ tone(t, 300, 0.20, 'sawtooth', 0.09); tone(t + 0.20, 220, 0.35, 'sawtooth', 0.09); },
     win(t){ [523, 659, 784, 1046].forEach((f,i) => tone(t + i*0.13, f, i===3 ? 0.5 : 0.16, 'triangle', 0.18)); },
     lose(t){ [392, 330, 262].forEach((f,i) => tone(t + i*0.22, f, i===2 ? 0.6 : 0.22, 'triangle', 0.16)); },
-    tick(t){ tone(t, 1200, 0.05, 'sine', 0.12); }
+    tick(t){ tone(t, 1200, 0.05, 'sine', 0.12); },
+    levelup(t){ [660, 880, 1175].forEach((f,i) => tone(t + i*0.11, f, 0.14, 'square', 0.09)); }
   };
   return {
     play(name){ if (!ensure()) return; try { P[name](ctx.currentTime + 0.01); } catch(e){} },
@@ -602,6 +620,7 @@ function renderWho(){ $('#who-name').value = USER; $('#who-save').textContent = 
 $('#whoform').addEventListener('submit', e => { e.preventDefault(); const n = cleanName($('#who-name').value); if (!n){ needName(); return; } setUser(n); renderWho(); renderMenu(); if (!$('#reclist').hidden) renderRecords(); });
 $('#m-start').onclick = () => { if (!needName()) openBrief(1); };
 $('#m-continue').onclick = () => { if (!needName()) openBrief(nextMissionId()); };
+$('#m-test').onclick = () => { if (!needName()) startTest(); };
 $('#m-rec').onclick = () => { const l = $('#reclist'); l.hidden = !l.hidden; $('#m-rec').setAttribute('aria-expanded', !l.hidden); if (!l.hidden) renderRecords(); };
 $('#rec-refresh').onclick = () => renderRecords();
 $('#m-list').onclick = () => { const l = $('#mlist'); l.hidden = !l.hidden; $('#m-list').setAttribute('aria-expanded', !l.hidden); };
@@ -1048,6 +1067,13 @@ function newState(m){
     sectorBusy:false, sectorWarn:false };
   const evs = m.events==='random' ? ['gust','fod','mayday','drone','nordo','fire','sys'].sort(() => Math.random()-.5).slice(0,6).map((k,i) => ({ k, t:(m.min >= 7 ? [35,95,155,215,275,335] : [30,72,112,155,200,245])[i] + rnd(-3,3) })) : m.events.map(e => ({ k:e.k, t:e.t }));
   G.schedule = evs.map(e => ({ ...e, done:false }));
+  if (m.test){
+    const pool = ['gust','fod','mayday','drone','nordo','sys','fire','gust','mayday','nordo','drone','fod','sys'];
+    let fires = 0, prev = '';
+    G.schedule = TEST_EVENTS.map(t => { let k; do { k = pool[Math.floor(Math.random()*pool.length)]; } while (k === prev || (k === 'fire' && fires >= 2)); if (k === 'fire') fires++; prev = k; return { k, t: t + rnd(-3, 3), done:false, surprise:true }; });
+    (m.script||[]).forEach(x => G.schedule.push({ spawn:x.o, t:x.t, done:false }));
+    G.level = 1;
+  }
   const sp = SURPRISE[m.id];
   if (sp && m.events !== 'random'){
     const used = new Set(evs.map(e => e.k));
@@ -1283,12 +1309,17 @@ function update(dt){
   G.schedule.forEach(s => { if (!s.done && G.t >= s.t){ s.done = true; if (s.spawn) spawnArrival(s.spawn); else { if (s.surprise) log('돌발 상황 발생!', 'bad'); triggerEvent(s.k); } } });
   if (G.card){ if (!G.card.answered && G.t >= G.card.deadline && !G.tutorial) resolveCard(-1, true); else if (G.card.answered && G.t >= G.card.hideAt){ G.card = null; renderCard(); } }
 
+  if (G.m.test && !G.tutorial){
+    const lv = testLevel(G.t), L = TEST_LEVELS[lv-1];
+    G.m.spawn = { every:L[0], max:L[1], bat:[L[2], L[3]] };
+    if (lv !== G.level){ G.level = lv; SFX.play('levelup'); flashToast('난이도 상승', `Lv.${lv} · 도착 간격 ${L[0]}초 · 공중 최대 ${L[1]}대`, false); log(`난이도 Lv.${lv}: 도착 간격 ${L[0]}초, 배터리 ${L[2]}~${L[3]}%`, 'sys'); if (G.nextSpawn > G.t + L[0]) G.nextSpawn = G.t + 1; }
+  }
   if (G.m.spawn && G.t >= G.nextSpawn){
     const air = G.ac.filter(a => ['inbound','holding','approach','goaround'].includes(a.st)).length;
     if (air < G.m.spawn.max) spawnArrival(null);
     G.nextSpawn = G.t + G.m.spawn.every + rnd(-2, 2);
   }
-  if (G.m.transit && G.t >= G.nextTransit){ spawnTransit(true); G.nextTransit = G.t + rnd(24, 34); }
+  if (G.m.transit && G.t >= G.nextTransit){ const tl = G.m.test ? TEST_LEVELS[testLevel(G.t)-1][4] : 0; if (!G.m.test || tl){ spawnTransit(true); } G.nextTransit = G.t + (tl ? rnd(tl*0.85, tl*1.15) : rnd(24, 34)); }
   if (G.t >= G.nextVisual){ spawnTransit(false); G.nextVisual = G.t + rnd(16, 24); }
 
   // sector state
@@ -1321,8 +1352,8 @@ function update(dt){
   // end checks
   if (G.tutorial){ tutCheck(); return; }
   if (G.stats.forced > 0 || G.stats.viol > G.m.limit){ endMission(false, G.stats.forced>0 ? '강제 착륙이 발생했습니다.' : `위반이 ${G.m.limit}회를 넘었습니다.`); return; }
-  if (goalsMet()){ if (G.goalsMetAt==null){ G.goalsMetAt = G.t; SFX.play('ok'); flashToast('목표 달성', '잠시 후 미션이 끝납니다', false); log('미션 목표 달성', 'good'); } else if (G.t - G.goalsMetAt > 2.5){ endMission(true); return; } }
-  if (G.t >= G.len){ endMission(goalsMet(), goalsMet() ? '' : '시간 안에 목표를 채우지 못했습니다.'); }
+  if (!G.m.test && goalsMet()){ if (G.goalsMetAt==null){ G.goalsMetAt = G.t; SFX.play('ok'); flashToast('목표 달성', '잠시 후 미션이 끝납니다', false); log('미션 목표 달성', 'good'); } else if (G.t - G.goalsMetAt > 2.5){ endMission(true); return; } }
+  if (G.t >= G.len){ if (G.m.test) endMission(true, ''); else endMission(goalsMet(), goalsMet() ? '' : '시간 안에 목표를 채우지 못했습니다.'); }
 }
 function goalsMet(){ return Object.entries(G.m.goals).every(([k,v]) => (k==='ev' ? G.stats.evOk : G.stats[k]) >= v); }
 
@@ -1447,7 +1478,9 @@ $('#queue').addEventListener('pointerdown', e => {
 });
 function renderBoard(){
   const m = G.m, s = G.stats;
-  if (G.tutorial) $('#goals').innerHTML = `<p class="noone">연습 중입니다. 미션 시작 후 목표(${goalText(m)})를 집계합니다.</p>`; else $('#goals').innerHTML = Object.entries(m.goals).map(([k,v]) => { const cur = k==='ev' ? s.evOk : s[k]; const done = cur >= v; return `<div class="g ${done?'done':''}"><span>${GOAL_TXT[k]}</span><span class="mono">${Math.min(cur,v)} / ${v}</span><div class="bar"><i style="width:${Math.min(100, cur/v*100)}%"></i></div></div>`; }).join('')
+  $('#g-levelbox').hidden = !m.test; if (m.test) $('#g-level').textContent = 'Lv.' + (G.tutorial ? 1 : testLevel(G.t));
+  if (m.test && !G.tutorial){ const L = TEST_LEVELS[testLevel(G.t)-1]; $('#goals').innerHTML = `<div class="g"><span>버틴 시간</span><span class="mono">${fmt(G.t)} / 10:00</span><div class="bar"><i style="width:${Math.min(100, G.t/6)}%"></i></div></div><div class="g"><span>난이도</span><span class="mono">Lv.${testLevel(G.t)} · 도착 ${L[0]}초</span></div><div class="g"><span>착륙 · 출발</span><span class="mono">${G.stats.land} · ${G.stats.dep}</span></div><div class="g"><span>위반 (6회면 종료)</span><span class="mono" style="color:${G.stats.viol?'var(--red)':'inherit'}">${G.stats.viol} / ${m.limit}</span></div>`; }
+  else if (G.tutorial) $('#goals').innerHTML = `<p class="noone">연습 중입니다. 미션 시작 후 목표(${goalText(m)})를 집계합니다.</p>`; else $('#goals').innerHTML = Object.entries(m.goals).map(([k,v]) => { const cur = k==='ev' ? s.evOk : s[k]; const done = cur >= v; return `<div class="g ${done?'done':''}"><span>${GOAL_TXT[k]}</span><span class="mono">${Math.min(cur,v)} / ${v}</span><div class="bar"><i style="width:${Math.min(100, cur/v*100)}%"></i></div></div>`; }).join('')
     + `<div class="g"><span>위반 허용</span><span class="mono" style="color:${s.viol?'var(--red)':'inherit'}">${s.viol} / ${m.limit}</span></div>`;
   const f = G.flags;
   const fst = fid => fatoClosed(fid) ? (f.closed>0 ? `폐쇄 ${Math.ceil(f.closed)}초` : `점검 ${Math.ceil(f.inspect)}초`) : f.fodF===fid ? '이물질' : fatoReserved(fid, null) ? '점유' : '사용 가능';
@@ -1518,15 +1551,15 @@ function startPlay(m){
   show('gamebox'); T = null; $('#tcap').hidden = true; $('#tmark').hidden = true;
   if (!initThree()){ $('#view').innerHTML = '<div class="fatal"><h2>3D 화면을 열 수 없습니다</h2><p>이 브라우저에서 WebGL을 쓸 수 없거나 3D 라이브러리를 불러오지 못했습니다. 다른 브라우저에서 열어 보세요.</p></div>'; return; }
   clearScene(); newState(m);
-  $('#g-no').textContent = `미션 ${m.id}`; $('#g-title').textContent = m.title;
+  $('#g-no').textContent = m.test ? '테스트' : `미션 ${m.id}`; $('#g-title').textContent = m.title;
   $('#g-guide').innerHTML = m.guide.map(g => `<li>${g}</li>`).join(''); $('#mguide').open = m.id <= 3;
   $('#g-assist').checked = G.assist;
   (m.init||[]).forEach(s => { const a = mkAc('dep'); a.st='turn'; a.stand=s.s; a.turn=s.turn; a.turnMax=Math.max(s.turn, 14); a.pos = W.STAND[s.s].slice(); a.from='도착편'; G.stands[s.s] = a.id; addMesh(a); G.ac.push(a); });
   $('#endbox').hidden = true; $('#pausebox').hidden = true; G.card = null; renderCard();
   setCam(m.cam, true);
   G.running = true; G.briefing = false;
-  log(`미션 ${m.id} 시작 · ${m.title}`, 'sys');
-  flashToast('미션 시작', goalText(m), false);
+  log(`${m.test ? '테스트' : '미션 '+m.id} 시작 · ${m.title}`, 'sys');
+  flashToast(m.test ? '테스트 시작' : '미션 시작', m.test ? '10분을 버티세요' : goalText(m), false);
   refreshUI(true);
 }
 function showBrief(resume){
@@ -1552,7 +1585,7 @@ function showBrief(resume){
     <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn primary big" id="bov-go">${resume ? '계속하기' : '미션 시작'}</button>${resume ? '' : '<button class="btn big" id="bov-menu">메인 화면</button>'}</div>
   </div>`;
   $('#bov').hidden = false;
-  $('#bov-go').onclick = () => { $('#bov').hidden = true; G.briefing = false; if (!resume) log(`미션 ${m.id} 시작 · ${m.title}`, 'sys'); refreshUI(true); };
+  $('#bov-go').onclick = () => { $('#bov').hidden = true; G.briefing = false; if (!resume) log(`${m.test ? '테스트' : '미션 '+m.id} 시작 · ${m.title}`, 'sys'); refreshUI(true); };
   if ($('#bov-menu')) $('#bov-menu').onclick = () => $('#g-quit').click();
   renderHint();
 }
@@ -1573,11 +1606,31 @@ function endMission(ok, why){
   const allEv = s.evTot === 0 || s.evOk === s.evTot;
   const timeLeftRatio = (G.len - G.t) / G.len;
   const st = !ok ? 0 : (s.viol === 0 && allEv && timeLeftRatio >= 0.2) ? 3 : s.viol === 0 ? 2 : 1;
-  if (ok){ PROG.stars[m.id] = Math.max(PROG.stars[m.id]||0, st); PROG.unlocked = Math.max(PROG.unlocked, Math.min(15, m.id+1)); saveProg(PROG); }
+  if (ok && !m.test){ PROG.stars[m.id] = Math.max(PROG.stars[m.id]||0, st); PROG.unlocked = Math.max(PROG.unlocked, Math.min(15, m.id+1)); saveProg(PROG); }
   recordResult({ time:new Date().toISOString(), name:USER || '이름 없음', mission:m.id, title:m.title, ok, stars:st, score:Math.round(G.score), viol:s.viol, secs:Math.round(G.t), land:s.land, dep:s.dep, ev:`${s.evOk}/${s.evTot}`, reason: ok ? '' : (why || '') });
   const next = MISSIONS.find(x => x.id === m.id+1);
   const inc = G.incidents.length ? G.incidents.map(i => `<div class="i"><span class="tt">${i.t}</span><span>${esc(i.title)}<span class="k">${esc(i.lesson)}</span></span><span class="p ${i.pts<0?'neg':'pos'}">${i.pts>0?'+':''}${i.pts}</span></div>`).join('') : '<p class="noone">위반이나 잘못된 조치가 없습니다.</p>';
   const goals = Object.entries(m.goals).map(([k,v]) => { const cur = k==='ev' ? s.evOk : s[k]; return `<div class="goal"><span>${GOAL_TXT[k]}</span><b style="color:${cur>=v?'var(--green)':'var(--red)'}">${cur} / ${v}</b></div>`; }).join('');
+  if (m.test){
+    const lv = testLevel(Math.min(G.t, 599));
+    $('#enddialog').innerHTML = `
+    <p class="label">테스트 단계 · 10분</p>
+    <h2 style="color:${ok?'var(--green)':'var(--red)'}">${ok ? '테스트 통과' : '테스트 종료'}</h2>
+    <p>${ok ? '10분을 모두 버텼습니다.' : esc(why || '')}</p>
+    <div class="stats">
+      <div class="stat"><p class="label">버틴 시간</p><p class="v">${fmt(G.t)}</p></div>
+      <div class="stat"><p class="label">도달 난이도</p><p class="v">Lv.${lv}</p></div>
+      <div class="stat"><p class="label">점수</p><p class="v">${Math.round(G.score)}</p></div>
+      <div class="stat"><p class="label">착륙 · 출발</p><p class="v">${s.land} · ${s.dep}</p></div>
+    </div>
+    <div class="stats" style="grid-template-columns:repeat(2,minmax(0,1fr))"><div class="stat"><p class="label">상황 조치</p><p class="v">${s.evOk} / ${s.evTot}</p></div><div class="stat"><p class="label">위반 · 강제 착륙</p><p class="v" style="color:${s.viol?'var(--red)':'var(--fg)'}">${s.viol} · ${s.forced}</p></div></div>
+    <div><p class="label" style="margin-bottom:6px">복기 · 놓친 원칙</p><div class="inc">${inc}</div></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn primary" id="e-retry" style="padding:12px 20px">다시 도전</button><button class="btn" id="e-menu" style="padding:12px 20px">메인 화면</button></div>`;
+    $('#endbox').hidden = false;
+    $('#e-retry').onclick = () => { $('#endbox').hidden = true; clearScene(); startPlay(JSON.parse(JSON.stringify(TEST_M))); };
+    $('#e-menu').onclick = () => { $('#endbox').hidden = true; clearScene(); renderMenu(); show('menu'); };
+    return;
+  }
   $('#enddialog').innerHTML = `
     <p class="label">미션 ${m.id} · ${esc(m.title)}</p>
     <h2 style="color:${ok?'var(--green)':'var(--red)'}">${ok ? '미션 성공' : '미션 실패'}</h2>
@@ -1613,6 +1666,11 @@ const LAND_STEPS = (n, stand) => [
   { tgt:{ ac:n }, say:() => `착륙했습니다. <b>스탠드 ${stand}</b>로 보내 FATO를 비우세요.`, wait:{ cmd:'stand'+stand, ref:n } }
 ];
 const TUT = {
+  16: [
+    { cam:'wide', tgt:{ pos:[0, ROOF, 0] }, say:'<b>테스트 단계</b>입니다. 15단계와 같은 버티포트(<b>FATO 2개 · 스탠드 6개</b>)를 <b>10분</b> 동안 운영합니다.', wait:'next' },
+    { tgt:{ ui:'#g-levelbox' }, say:'1분마다 <b>난이도가 한 단계씩</b> 오릅니다(Lv.1~10). 드론이 더 자주, 배터리가 더 적은 상태로 들어오고 돌발 상황도 잦아집니다.', wait:'next' },
+    { tgt:{ ui:'.board' }, say:'위반 <b>6회</b> 또는 <b>강제 착륙 1회</b>면 그 시점에 끝납니다. <b>10분을 버티면 통과</b>입니다. 9분 무렵이 가장 어렵습니다.', wait:'next' }
+  ],
   1: [
     { cam:'near', tgt:{ pos:[0, ROOF, 0] }, say:'여기가 우리가 관제하는 <b>도심 버티포트</b>입니다. 옥상의 <b>FATO</b>(착륙구역)는 한 번에 한 대만 쓸 수 있습니다.', wait:'next' },
     { tgt:{ ui:'#queue' }, say:'드론이 요청을 보내면 오른쪽 위 <b>요청 · 지시</b> 목록에 쌓입니다. 3D 화면의 드론 이름표에서도 같은 버튼을 누를 수 있습니다.', wait:'next' },
@@ -1747,7 +1805,7 @@ function startTutorial(m){
   if (!initThree()){ $('#view').innerHTML = '<div class="fatal"><h2>3D 화면을 열 수 없습니다</h2><p>이 브라우저에서 WebGL을 쓸 수 없거나 3D 라이브러리를 불러오지 못했습니다. 다른 브라우저에서 열어 보세요.</p></div>'; return; }
   clearScene(); newState(m);
   G.tutorial = true; G.schedule = []; G.assist = true; G.nextSpawn = 1e9; G.nextTransit = 1e9; G.tutSpeed = 1;
-  $('#g-no').textContent = `미션 ${m.id} · 연습`; $('#g-title').textContent = m.title;
+  $('#g-no').textContent = m.test ? '테스트 · 안내' : `미션 ${m.id} · 연습`; $('#g-title').textContent = m.title;
   $('#g-guide').innerHTML = m.guide.map(g => `<li>${g}</li>`).join(''); $('#mguide').open = false;
   $('#g-assist').checked = true; $('#bov').hidden = true; $('#endbox').hidden = true; $('#pausebox').hidden = true;
   G.card = null; renderCard();
@@ -1799,7 +1857,7 @@ function renderTut(){
   document.querySelectorAll('.tut-ring').forEach(e => e.classList.remove('tut-ring'));
   let body, btns = '';
   if (st.final){
-    body = `<b>연습 완료!</b> 실제 미션에서는 드론이 계속 들어오고 시간이 흐릅니다.${T.m.surprise ? '<br><b style="color:var(--red)">이 단계부터는 예고 없는 돌발 상황이 생길 수 있습니다.</b>' : ''}<br>목표: <b>${goalText(T.m)}</b> · 제한 시간 ${fmt(T.m.min*60)} · 위반 ${T.m.limit+1}회 이상이면 실패`;
+    if (T.m.test) body = `<b>준비 완료!</b> 10분 동안 버티면 통과입니다. 위반 ${T.m.limit+1}회 이상 또는 강제 착륙 1회면 종료됩니다.`; else body = `<b>연습 완료!</b> 실제 미션에서는 드론이 계속 들어오고 시간이 흐릅니다.${T.m.surprise ? '<br><b style="color:var(--red)">이 단계부터는 예고 없는 돌발 상황이 생길 수 있습니다.</b>' : ''}<br>목표: <b>${goalText(T.m)}</b> · 제한 시간 ${fmt(T.m.min*60)} · 위반 ${T.m.limit+1}회 이상이면 실패`;
     btns = `<button class="btn primary" id="t-go">미션 시작</button><button class="btn" id="t-again">연습 다시</button>`;
   } else {
     body = typeof st.say === 'function' ? st.say(T) : st.say;
@@ -1810,7 +1868,7 @@ function renderTut(){
     btns += `<button class="btn t-skip" id="t-skip">연습 건너뛰기</button>`;
     if (st.tgt && st.tgt.ui){ const u = document.querySelector(st.tgt.ui); if (u) u.classList.add('tut-ring'); }
   }
-  el.innerHTML = `<p class="t-step">연습 ${st.final ? n : T.i+1} / ${n} · 미션 ${T.m.id} ${esc(T.m.title)}</p><p class="t-say">${body}</p><div class="t-btns">${btns}</div>`;
+  el.innerHTML = `<p class="t-step">${T.m.test ? '안내' : '연습'} ${st.final ? n : T.i+1} / ${n} · ${T.m.test ? '' : '미션 '+T.m.id+' '}${esc(T.m.title)}</p><p class="t-say">${body}</p><div class="t-btns">${btns}</div>`;
   el.hidden = false;
   if ($('#t-next')) $('#t-next').onclick = () => nextStep();
   if ($('#t-skip')) $('#t-skip').onclick = () => endTutorial();

@@ -39,7 +39,7 @@ function doGet() {
   const rows = values.map(r => ({
     time: r[0] instanceof Date ? r[0].toISOString() : String(r[0]),
     name: String(r[1]).replace(/^'/, ''), mission: Number(r[2]), title: String(r[3]),
-    ok: r[4] === '성공', stars: Number(r[5]), score: Number(r[6]), viol: Number(r[7])
+    ok: r[4] === '성공', stars: Number(r[5]), score: Number(r[6]), viol: Number(r[7]), secs: Number(r[8])
   }));
   return json_({ rows });
 }
