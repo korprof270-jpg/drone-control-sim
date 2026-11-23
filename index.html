@@ -299,6 +299,7 @@ table.rec .ok { color: var(--green); font-weight: 700; } table.rec .ng { color: 
           <div class="kv"><span class="label">점수</span><span class="v" id="g-score">0</span></div>
           <div class="kv"><span class="label">위반</span><span class="v" id="g-viol">0</span></div>
           <label class="switch"><input type="checkbox" id="g-assist"> 가이드</label>
+          <button class="btn" id="g-sound" style="padding:6px 12px" aria-pressed="true">소리 켜짐</button>
           <button class="btn" id="g-pause" style="padding:6px 12px">일시정지</button>
         </div>
       </div>
@@ -521,6 +522,58 @@ const rnd = (a,b) => a + Math.random()*(b-a);
 const fmt = t => { t = Math.max(0, Math.ceil(t)); return Math.floor(t/60)+':'+String(t%60).padStart(2,'0'); };
 function show(id){ ['menu','gamebox'].forEach(x => $('#'+x).hidden = (x!==id)); window.scrollTo(0,0); }
 const stars = n => [1,2,3].map(i => i<=n ? '★' : '<span class="off">★</span>').join('');
+
+/* =========================================================
+   SOUND (Web Audio, synthesized — no audio files)
+   ========================================================= */
+const SFX = (() => {
+  let ctx = null, master = null, noiseBuf = null, hum = null, lastIn = 0;
+  let on = lsGet('vtp3d-sound', true);
+  function ensure(){
+    if (!on) return null;
+    if (!ctx){
+      const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null;
+      try { ctx = new AC(); } catch(e){ return null; }
+      master = ctx.createGain(); master.gain.value = 1.3; master.connect(ctx.destination);
+      noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate); const d = noiseBuf.getChannelData(0); for (let i=0;i<d.length;i++) d[i] = Math.random()*2 - 1;
+    }
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    return ctx;
+  }
+  function env(g, t0, vol, dur, hold){ g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(vol, t0 + 0.012); if (hold) g.gain.setValueAtTime(vol, t0 + dur*hold); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur); }
+  function tone(t0, freq, dur, type, vol, freqEnd){ const o = ctx.createOscillator(), g = ctx.createGain(); o.type = type || 'sine'; o.frequency.setValueAtTime(freq, t0); if (freqEnd) o.frequency.exponentialRampToValueAtTime(freqEnd, t0 + dur); env(g, t0, vol || 0.2, dur); o.connect(g); g.connect(master); o.start(t0); o.stop(t0 + dur + 0.05); }
+  function noise(t0, dur, vol, ftype, f, q, fEnd, hold){ const src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true; const fl = ctx.createBiquadFilter(); fl.type = ftype || 'bandpass'; fl.frequency.setValueAtTime(f || 1800, t0); if (fEnd) fl.frequency.exponentialRampToValueAtTime(fEnd, t0 + dur); fl.Q.value = q || 0.8; const g = ctx.createGain(); env(g, t0, vol || 0.15, dur, hold); src.connect(fl); fl.connect(g); g.connect(master); src.start(t0); src.stop(t0 + dur + 0.05); }
+  const P = {
+    radioIn(t){ noise(t, 0.18, 0.26, 'bandpass', 2400, 1.2); tone(t + 0.17, 1250, 0.08, 'square', 0.10, 950); },          // 수신: 스쿼시 + 짧은 신호음
+    radioOut(t){ tone(t, 1900, 0.03, 'square', 0.12); noise(t + 0.02, 0.22, 0.20, 'bandpass', 2000, 1.5, 1600, 0.7); tone(t + 0.27, 1500, 0.09, 'sine', 0.16); }, // 송신: PTT 클릭 + 잡음 + 로저 비프
+    clear(t){ tone(t + 0.32, 880, 0.12, 'sine', 0.16); tone(t + 0.44, 1320, 0.18, 'sine', 0.16); },                      // 허가
+    taxi(t){ tone(t + 0.32, 660, 0.09, 'triangle', 0.12); tone(t + 0.42, 880, 0.09, 'triangle', 0.10); },              // 지상 지시
+    hold(t){ tone(t + 0.32, 740, 0.12, 'triangle', 0.14); tone(t + 0.46, 740, 0.12, 'triangle', 0.14); },              // 복행 · 대기
+    land(t){ noise(t, 0.30, 0.30, 'lowpass', 260, 0.7); tone(t, 95, 0.30, 'sine', 0.30, 48); noise(t + 0.1, 1.4, 0.07, 'bandpass', 700, 0.9, 180); }, // 접지 + 로터 감속
+    takeoff(t){ noise(t + 0.3, 1.8, 0.26, 'bandpass', 180, 0.8, 900, 0.6); tone(t + 0.3, 90, 1.8, 'sawtooth', 0.04, 200); }, // 로터 가속
+    divert(t){ tone(t + 0.32, 720, 0.55, 'triangle', 0.16, 340); },                                                       // 전환
+    viol(t){ tone(t, 150, 0.22, 'square', 0.13); tone(t + 0.28, 150, 0.22, 'square', 0.13); },                          // 위반 버저
+    alarm(t){ for (let i=0;i<3;i++){ tone(t + i*0.34, 980, 0.15, 'square', 0.10); tone(t + i*0.34 + 0.17, 740, 0.15, 'square', 0.10); } }, // 상황 발생 경보
+    ok(t){ tone(t, 1046, 0.10, 'sine', 0.15); tone(t + 0.10, 1318, 0.10, 'sine', 0.15); tone(t + 0.20, 1568, 0.20, 'sine', 0.15); },
+    bad(t){ tone(t, 300, 0.20, 'sawtooth', 0.09); tone(t + 0.20, 220, 0.35, 'sawtooth', 0.09); },
+    win(t){ [523, 659, 784, 1046].forEach((f,i) => tone(t + i*0.13, f, i===3 ? 0.5 : 0.16, 'triangle', 0.18)); },
+    lose(t){ [392, 330, 262].forEach((f,i) => tone(t + i*0.22, f, i===2 ? 0.6 : 0.22, 'triangle', 0.16)); },
+    tick(t){ tone(t, 1200, 0.05, 'sine', 0.12); }
+  };
+  return {
+    play(name){ if (!ensure()) return; try { P[name](ctx.currentTime + 0.01); } catch(e){} },
+    incoming(){ const now = performance.now(); if (now - lastIn < 900) return; lastIn = now; this.play('radioIn'); },
+    unlock(){ ensure(); },
+    hum(level){ // 로터 소음 배경음: 공중 드론 수에 비례
+      if (!on || !ctx){ return; }
+      if (!hum){ const src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true; const fl = ctx.createBiquadFilter(); fl.type = 'bandpass'; fl.frequency.value = 160; fl.Q.value = 0.9; const g = ctx.createGain(); g.gain.value = 0; src.connect(fl); fl.connect(g); g.connect(master); src.start(); hum = g; }
+      hum.gain.setTargetAtTime(level, ctx.currentTime, 0.4);
+    },
+    get on(){ return on; },
+    set(v){ on = v; lsSet('vtp3d-sound', v); if (ctx){ if (v) ctx.resume().catch(() => {}); else ctx.suspend().catch(() => {}); } }
+  };
+})();
+document.addEventListener('pointerdown', () => SFX.unlock(), { once:true });
 
 /* =========================================================
    MENU & BRIEFING
@@ -1034,9 +1087,10 @@ function stepTween(a, dt){
 const pathLen = pts => { let s = 0; for (let i=1;i<pts.length;i++) s += Math.hypot(pts[i][0]-pts[i-1][0], pts[i][1]-pts[i-1][1], pts[i][2]-pts[i-1][2]); return s; };
 
 /* scoring & logging */
-function log(text, cls){ if (!G) return; G.logs.push({ t:fmt(G.len - G.t), text, cls:cls||'' }); if (G.logs.length > 80) G.logs.shift(); G.logDirty = true; }
+function log(text, cls){ if (!G) return; if (cls === 'me') SFX.play('radioOut'); G.logs.push({ t:fmt(G.len - G.t), text, cls:cls||'' }); if (G.logs.length > 80) G.logs.shift(); G.logDirty = true; }
 function addScore(n){ G.score += n; }
 function violation(key, a, pts){
+  SFX.play('viol');
   if (G.tutorial){ flashToast('주의', LESSON[key][0], true); return; }
   const [title, lesson] = LESSON[key];
   G.stats.viol++; addScore(-pts);
@@ -1071,7 +1125,7 @@ function spawnTransit(crossing){
   t.mesh = makeCraft('transit'); t.mesh.position.set(...t.pos); R.scene.add(t.mesh); G.tr.push(t);
 }
 function enterHold(a){ a.st='holding'; a.ang=0; setReq(a,'land'); }
-function setReq(a, r){ a.req = r; a.reqT = G.t; }
+function setReq(a, r){ a.req = r; a.reqT = G.t; if (G.running) SFX.incoming(); }
 function clearReq(a){ if (a.req) a.wait += G.t - a.reqT; a.req = null; }
 function fatoReserved(f, except){ return G.ac.some(b => b!==except && (!f || b.fato===f) && (['approach','landed','taxi_out','lineup'].includes(b.st) || (b.st==='takeoff' && b.tw && b.tw.t < 1.8))); }
 const multiF = () => G.m.fatos.length > 1;
@@ -1100,7 +1154,7 @@ function touchdown(a){
   const wasEmg = a.emg, wasNordo = a.nordo;
   const pts = wasEmg ? 150 : Math.max(40, Math.round(100 - 2*Math.max(0, a.wait-12)));
   G.stats.land++; if (wasEmg) G.stats.emg++;
-  addScore(pts); log(`${a.cs}: 착륙${wasEmg?' (비상기)':''}${wasNordo?' · 전화로 교신 복구':''} +${pts}`, 'good');
+  SFX.play('land'); addScore(pts); log(`${a.cs}: 착륙${wasEmg?' (비상기)':''}${wasNordo?' · 전화로 교신 복구':''} +${pts}`, 'good');
   a.emg = false; a.nordo = false; a.wait = 0; setReq(a,'stand');
 }
 function finishTurn(a){ a.st='ready'; a.kind='dep'; a.bat=100; a.wait=0; a.to = PORTS[Math.floor(Math.random()*PORTS.length)].name; setReq(a,'taxi'); log(`${a.cs}: 스탠드 ${a.stand}, ${a.to}행 출발 준비 완료`); }
@@ -1140,13 +1194,13 @@ function doCmd(a, k){
   if (a.nordo && (k.startsWith('land') || k==='hold' || k==='divert')){ log(`${a.cs}: (응답 없음)`, 'sys'); return; }
   const c = check(a, k);
   if (c && c[1] > 0){ violation(c[0], a, c[1]); refreshUI(true); return; }
-  if (k.startsWith('land') && a.st==='holding'){ const fid = keyFato(k); log(`관제 → ${a.cs}: FATO ${fNum(fid)} 착륙 허가`, 'me'); startApproach(a, fid); }
-  else if (k==='hold' && a.st==='approach'){ log(`관제 → ${a.cs}: 복행, ${a.hold} 대기`, 'me'); goAround(a, true); }
+  if (k.startsWith('land') && a.st==='holding'){ const fid = keyFato(k); log(`관제 → ${a.cs}: FATO ${fNum(fid)} 착륙 허가`, 'me'); SFX.play('clear'); startApproach(a, fid); }
+  else if (k==='hold' && a.st==='approach'){ log(`관제 → ${a.cs}: 복행, ${a.hold} 대기`, 'me'); SFX.play('hold'); goAround(a, true); }
   else if (k==='divert' && ['holding','approach','inbound'].includes(a.st)){
     clearReq(a); const ok = a.emg || a.bat < 24 || G.flags.closed>0 || G.flags.inspect>0 || G.flags.gust>0 || G.flags.drone>0 || G.flags.fod; G.stats.div++;
     if (ok){ addScore(10); log(`관제 → ${a.cs}: 대체 버티포트로 전환 (적절) +10`, 'me'); }
     else { addScore(-30); G.incidents.push({ t:fmt(G.len-G.t), title:a.cs+' · '+LESSON.divert[0], lesson:LESSON.divert[1], pts:-30 }); log(`관제 → ${a.cs}: 대체 버티포트로 전환 (불필요) −30`, 'bad'); }
-    a.st='divert'; a.emg=false; a.req=null;
+    SFX.play('divert'); a.st='divert'; a.emg=false; a.req=null;
     const dest = PORTS.find(p => p.name!==a.from) || PORTS[0];
     const pts = [a.pos, [a.pos[0]-80, CRUISE, a.pos[2]], [dest.pos[0], CRUISE, dest.pos[2]]];
     tween(a, pts, pathLen(pts)/70, () => removeAc(a));
@@ -1154,22 +1208,22 @@ function doCmd(a, k){
   else if (k.startsWith('stand') && a.st==='landed'){
     const s = k.slice(5); if (!availStand(s)) return;
     clearReq(a); a.st='taxi_in'; a.stand=s; G.stands[s]=a.id; const sp = W.STAND[s];
-    log(`관제 → ${a.cs}: 스탠드 ${s}로 이동`, 'me');
+    log(`관제 → ${a.cs}: 스탠드 ${s}로 이동`, 'me'); SFX.play('taxi');
     const FP = W.FATOS[a.fato||'F1']; tween(a, [FP, [W.TAXIX, ROOF+2, FP[2]], [W.TAXIX, ROOF+2, sp[2]], sp], 3.8, () => { a.st='turn'; a.turnMax = a.turn = rnd(12, 16); G.stats.park++; addScore(20); });
   }
   else if (k==='apron' && a.st==='landed'){
     if (G.ac.some(b => b.st==='apron' || b.st==='deboard')) return;
-    clearReq(a); a.st='apron'; log(`관제 → ${a.cs}: 임시 주기장 이동, 승객 하기`, 'me');
+    clearReq(a); a.st='apron'; log(`관제 → ${a.cs}: 임시 주기장 이동, 승객 하기`, 'me'); SFX.play('taxi');
     const FP = W.FATOS[a.fato||'F1']; tween(a, [FP, [W.APRON[0], ROOF+2, FP[2]], W.APRON], 3, () => { a.st='deboard'; a.turn = 8; G.stats.park++; });
   }
   else if (k.startsWith('taxi') && a.st==='ready'){
     const fid = keyFato(k); a.fato = fid; const FP = W.FATOS[fid];
     clearReq(a); a.st='taxi_out'; const sp = W.STAND[a.stand]; G.stands[a.stand] = null;
-    log(`관제 → ${a.cs}: 스탠드 ${a.stand}에서 FATO ${fNum(fid)}로 이동`, 'me');
+    log(`관제 → ${a.cs}: 스탠드 ${a.stand}에서 FATO ${fNum(fid)}로 이동`, 'me'); SFX.play('taxi');
     tween(a, [sp, [W.TAXIX, ROOF+2, sp[2]], [W.TAXIX, ROOF+2, FP[2]], FP], 3.8, () => { a.st='lineup'; setReq(a,'takeoff'); log(`${a.cs}: FATO ${fNum(fid)}, 이륙 준비 완료`); });
   }
   else if (k==='takeoff' && a.st==='lineup'){
-    clearReq(a); a.st='takeoff'; log(`관제 → ${a.cs}: FATO ${fNum(a.fato)} 이륙 허가`, 'me'); const FP = W.FATOS[a.fato||'F1'];
+    clearReq(a); a.st='takeoff'; log(`관제 → ${a.cs}: FATO ${fNum(a.fato)} 이륙 허가`, 'me'); SFX.play('clear'); SFX.play('takeoff'); const FP = W.FATOS[a.fato||'F1'];
     tween(a, [FP, [FP[0], 80, FP[2]], [FP[0], 135, FP[2]]], 3.6, () => {
       const pts = Math.max(40, Math.round(100 - 2*Math.max(0, a.wait-12)));
       G.stats.dep++; addScore(pts); log(`${a.cs}: 이륙 · 회랑 인계 (${a.to}행) +${pts}`, 'good');
@@ -1188,7 +1242,7 @@ function triggerEvent(k){
   ev.start(); G.stats.evTot++;
   const perm = ev.opts.map((_,i)=>i).sort(() => Math.random()-.5);
   G.card = { ev, perm, deadline:G.t + 20, answered:false, pick:null, hideAt:0 };
-  log(`상황 발생: ${ev.title}`, ev.sev==='bad' ? 'bad' : 'sys');
+  log(`상황 발생: ${ev.title}`, ev.sev==='bad' ? 'bad' : 'sys'); SFX.play('alarm');
   flashToast('상황 발생', ev.title, ev.sev==='bad');
   renderCard();
 }
@@ -1196,6 +1250,7 @@ function resolveCard(i, timeout){
   const c = G.card; if (!c || c.answered) return;
   c.answered = true; c.pick = i; c.hideAt = G.t + 7;
   const v = i>=0 ? c.ev.opts[i][1] : -1;
+  SFX.play(v >= 1 ? 'ok' : 'bad');
   if (v===2){ G.stats.evOk++; addScore(60); c.ev.apply(); log(`조치: ${c.ev.opts[i][0]} +60`, 'good'); }
   else if (v===1){ addScore(20); G.incidents.push({ t:fmt(G.len-G.t), title:c.ev.title+' · 부분 조치', lesson:c.ev.why, pts:20 }); log(`조치(부분): ${c.ev.opts[i][0]} +20`, 'sys'); }
   else { const p = timeout ? 60 : 40; addScore(-p); G.incidents.push({ t:fmt(G.len-G.t), title:c.ev.title+' · '+(timeout?'20초 안에 조치하지 못함':'잘못된 조치'), lesson:c.ev.why, pts:-p }); log(`${timeout?'시간 초과':'잘못된 조치'}: ${c.ev.title} −${p}`, 'bad'); }
@@ -1212,7 +1267,7 @@ function renderCard(){
   box.innerHTML = h + '</div>';
 }
 $('#cardbox').addEventListener('click', e => { const b = e.target.closest('.opt'); if (!(b && G && G.card && !G.card.answered)) return; const i = +b.dataset.i;
-  if (G.tutorial && G.card.ev.opts[i][1] !== 2){ b.classList.add('ng'); flashToast('다시 골라 보세요', G.card.ev.opts[i][1]===1 ? '부분적으로만 맞는 조치입니다' : '이 조치는 위험합니다', true); return; }
+  if (G.tutorial && G.card.ev.opts[i][1] !== 2){ b.classList.add('ng'); SFX.play('bad'); flashToast('다시 골라 보세요', G.card.ev.opts[i][1]===1 ? '부분적으로만 맞는 조치입니다' : '이 조치는 위험합니다', true); return; }
   resolveCard(i, false); });
 
 /* =========================================================
@@ -1258,15 +1313,15 @@ function update(dt){
     if (a.st==='deboard'){ a.turn -= dt; if (a.turn <= 0){ log(`${a.cs}: 임시 주기장 승객 하기 완료`); removeAc(a); } }
     if (!G.tutorial && ['inbound','holding','approach','goaround'].includes(a.st)){
       a.bat -= dt * (a.emg ? 0.6 : 0.3);
-      if (a.bat <= 12 && !a.emg){ a.emg = true; G.stats.viol++; addScore(-50); G.incidents.push({ t:fmt(G.len-G.t), title:a.cs+' · '+LESSON.battery[0], lesson:LESSON.battery[1], pts:-50 }); log(`${a.cs}: 배터리 12%, 비상 선언 −50`, 'bad'); flashToast('배터리 비상', a.cs, true); }
-      if (a.bat <= 0){ a.bat = 0; G.stats.forced++; addScore(-300); G.incidents.push({ t:fmt(G.len-G.t), title:a.cs+' · '+LESSON.forced[0], lesson:LESSON.forced[1], pts:-300 }); log(`${a.cs}: 배터리 소진, 강제 착륙 −300`, 'bad'); removeAc(a); }
+      if (a.bat <= 12 && !a.emg){ a.emg = true; G.stats.viol++; addScore(-50); G.incidents.push({ t:fmt(G.len-G.t), title:a.cs+' · '+LESSON.battery[0], lesson:LESSON.battery[1], pts:-50 }); log(`${a.cs}: 배터리 12%, 비상 선언 −50`, 'bad'); flashToast('배터리 비상', a.cs, true); SFX.play('alarm'); }
+      if (a.bat <= 0){ a.bat = 0; G.stats.forced++; addScore(-300); G.incidents.push({ t:fmt(G.len-G.t), title:a.cs+' · '+LESSON.forced[0], lesson:LESSON.forced[1], pts:-300 }); log(`${a.cs}: 배터리 소진, 강제 착륙 −300`, 'bad'); SFX.play('bad'); removeAc(a); }
     }
   });
 
   // end checks
   if (G.tutorial){ tutCheck(); return; }
   if (G.stats.forced > 0 || G.stats.viol > G.m.limit){ endMission(false, G.stats.forced>0 ? '강제 착륙이 발생했습니다.' : `위반이 ${G.m.limit}회를 넘었습니다.`); return; }
-  if (goalsMet()){ if (G.goalsMetAt==null){ G.goalsMetAt = G.t; flashToast('목표 달성', '잠시 후 미션이 끝납니다', false); log('미션 목표 달성', 'good'); } else if (G.t - G.goalsMetAt > 2.5){ endMission(true); return; } }
+  if (goalsMet()){ if (G.goalsMetAt==null){ G.goalsMetAt = G.t; SFX.play('ok'); flashToast('목표 달성', '잠시 후 미션이 끝납니다', false); log('미션 목표 달성', 'good'); } else if (G.t - G.goalsMetAt > 2.5){ endMission(true); return; } }
   if (G.t >= G.len){ endMission(goalsMet(), goalsMet() ? '' : '시간 안에 목표를 채우지 못했습니다.'); }
 }
 function goalsMet(){ return Object.entries(G.m.goals).every(([k,v]) => (k==='ev' ? G.stats.evOk : G.stats[k]) >= v); }
@@ -1502,15 +1557,18 @@ function showBrief(resume){
   renderHint();
 }
 $('#howbtn').onclick = () => { if (!G || G.tutorial) return; const b = $('#howbtn'); if (b.dataset.c){ delete b.dataset.c; b.textContent = '연습 다시'; startTutorial(G.m); } else { b.dataset.c = '1'; b.textContent = '한 번 더: 연습 다시'; setTimeout(() => { delete b.dataset.c; b.textContent = '연습 다시'; }, 2500); } };
+function renderSoundBtn(){ const b = $('#g-sound'); b.textContent = SFX.on ? '소리 켜짐' : '소리 꺼짐'; b.setAttribute('aria-pressed', SFX.on); }
+$('#g-sound').onclick = () => { SFX.set(!SFX.on); if (SFX.on){ SFX.unlock(); SFX.play('tick'); } renderSoundBtn(); };
+renderSoundBtn();
 $('#g-assist').onchange = e => { if (G){ G.assist = e.target.checked; refreshUI(true); } };
-function togglePause(){ if (!G || !G.running) return; G.paused = !G.paused; $('#pausebox').hidden = !G.paused; $('#g-pause').textContent = G.paused ? '계속' : '일시정지'; }
+function togglePause(){ if (!G || !G.running) return; G.paused = !G.paused; if (G.paused) SFX.hum(0); $('#pausebox').hidden = !G.paused; $('#g-pause').textContent = G.paused ? '계속' : '일시정지'; }
 $('#g-pause').onclick = togglePause; $('#resume').onclick = togglePause;
-$('#g-quit').onclick = () => { if (G){ G.running = false; clearScene(); } T = null; $('#tcap').hidden = true; $('#tmark').hidden = true; document.querySelectorAll('.tut-ring').forEach(e => e.classList.remove('tut-ring')); $('#bov').hidden = true; renderMenu(); show('menu'); };
+$('#g-quit').onclick = () => { SFX.hum(0); if (G){ G.running = false; clearScene(); } T = null; $('#tcap').hidden = true; $('#tmark').hidden = true; document.querySelectorAll('.tut-ring').forEach(e => e.classList.remove('tut-ring')); $('#bov').hidden = true; renderMenu(); show('menu'); };
 document.addEventListener('keydown', e => { if (e.code==='Space' && G && G.running && !G.briefing && !$('#gamebox').hidden){ e.preventDefault(); togglePause(); } });
 document.addEventListener('visibilitychange', () => { if (document.hidden && G && G.running && !G.paused && !G.briefing) togglePause(); });
 
 function endMission(ok, why){
-  if (G.ended) return; G.ended = true; G.running = false;
+  if (G.ended) return; G.ended = true; G.running = false; SFX.hum(0); SFX.play(ok ? 'win' : 'lose');
   const m = G.m, s = G.stats;
   const allEv = s.evTot === 0 || s.evOk === s.evTot;
   const timeLeftRatio = (G.len - G.t) / G.len;
@@ -1793,7 +1851,7 @@ let last = 0, uiAcc = 0, elapsed = 0;
 function frame(ts){
   const dt = Math.min(0.1, (ts - last)/1000 || 0); last = ts; elapsed += dt;
   if (R && G && !$('#gamebox').hidden){
-    if (G.running && !G.paused && !G.briefing){ update(G.tutorial ? (G.card && !G.card.answered ? 0 : dt * (G.tutSpeed || 1)) : dt); uiAcc += dt; if (uiAcc > 0.2){ uiAcc = 0; renderQueue(false); renderBoard(); renderHint(); } renderLog(); }
+    if (G.running && !G.paused && !G.briefing){ update(G.tutorial ? (G.card && !G.card.answered ? 0 : dt * (G.tutSpeed || 1)) : dt); uiAcc += dt; if (uiAcc > 0.2){ uiAcc = 0; renderQueue(false); renderBoard(); renderHint(); SFX.hum(Math.min(0.08, 0.016 * G.ac.filter(a => AIR.includes(a.st) || ['approach','takeoff','taxi_in','taxi_out'].includes(a.st)).length)); } renderLog(); }
     if (G.ac){ sync3D(elapsed); updateCam(dt); updateLabels(); if (T) posTut(); }
     R.renderer.render(R.scene, R.camera);
   }
