@@ -323,6 +323,7 @@ table.rec .ok { color: var(--green); font-weight: 700; } table.rec .ng { color: 
           <div class="kv"><span class="label">위반</span><span class="v" id="g-viol">0</span></div>
           <label class="switch"><input type="checkbox" id="g-assist"> 가이드</label>
           <button class="btn" id="g-sound" style="padding:6px 12px" aria-pressed="true">소리 켜짐</button>
+          <button class="btn" id="g-music" style="padding:6px 12px" aria-pressed="true">음악 켜짐</button>
           <button class="btn" id="g-pause" style="padding:6px 12px">일시정지</button>
         </div>
       </div>
@@ -683,45 +684,31 @@ const SFX = (() => {
 })();
 document.addEventListener('pointerdown', () => SFX.unlock(), { once:true });
 
-/* background music: generative ambient score, intensity follows the situation */
+/* background music: ElevenLabs Music (eleven_music_v2_5) 30-second track, looped quietly under the effects */
 const MUSIC = (() => {
-  let on = lsGet('vtp3d-music', true), gain = null, filt = null, timer = null, nextBar = 0, bar = 0, level = 0, want = 0;
-  const BPM = 84, BEAT = 60 / BPM, BARLEN = BEAT * 4;
-  const CH = [[57, 60, 64], [53, 57, 60], [48, 52, 55], [55, 59, 62], [57, 60, 64], [53, 57, 60], [52, 55, 59], [55, 59, 62]]; // Am F C G Am F Em G
-  const hz = n => 440 * Math.pow(2, (n - 69) / 12);
-  function setup(){
-    const ctx = SFX.ctx; if (!ctx || gain) return ctx;
-    gain = ctx.createGain(); gain.gain.value = 0; filt = ctx.createBiquadFilter(); filt.type = 'lowpass'; filt.frequency.value = 900; filt.Q.value = 0.4;
-    filt.connect(gain); gain.connect(SFX.master); return ctx;
+  let on = lsGet('vtp3d-music', true), buf = null, loading = false, failed = false, src = null, gain = null, playing = false;
+  const VOL = 0.065;
+  function load(ctx){
+    if (buf || loading || failed) return; loading = true;
+    fetch('lib/bgm.mp3').then(r => { if (!r.ok) throw new Error('bgm'); return r.arrayBuffer(); })
+      .then(ab => new Promise((res, rej) => { const p = ctx.decodeAudioData(ab, res, rej); if (p && p.catch) p.catch(rej); }))
+      .then(b => { buf = b; loading = false; }).catch(() => { loading = false; failed = true; });
   }
-  function note(ctx, t, freq, dur, type, vol, dest, att){
-    const o = ctx.createOscillator(), g = ctx.createGain(); o.type = type; o.frequency.value = freq;
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + (att || 0.02)); g.gain.setValueAtTime(vol, t + dur*0.7); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(dest || filt); o.start(t); o.stop(t + dur + 0.05);
+  function start(ctx){
+    if (!buf) return;
+    if (!gain){ gain = ctx.createGain(); gain.gain.value = 0; gain.connect(SFX.master); }
+    src = ctx.createBufferSource(); src.buffer = buf; src.loop = true; src.loopStart = 0.02; src.loopEnd = buf.duration - 0.02;
+    src.connect(gain); src.start(); gain.gain.cancelScheduledValues(ctx.currentTime); gain.gain.setTargetAtTime(VOL, ctx.currentTime, 1.2); playing = true;
   }
-  function hat(ctx, t, vol){ const n = ctx.createBufferSource(); n.buffer = SFX.noiseBuf; const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 7000; const g = ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05); n.connect(hp); hp.connect(g); g.connect(gain); n.start(t); n.stop(t + 0.06); }
-  function kick(ctx, t, vol){ const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.setValueAtTime(120, t); o.frequency.exponentialRampToValueAtTime(45, t + 0.18); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.25); o.connect(g); g.connect(gain); o.start(t); o.stop(t + 0.3); }
-  function schedule(){
-    const ctx = SFX.ctx; if (!ctx || !on) return;
-    level += (want - level) * 0.25;
-    gain.gain.setTargetAtTime(want > 0 ? 0.11 + level*0.05 : 0, ctx.currentTime, 0.8);
-    filt.frequency.setTargetAtTime(700 + level*2600, ctx.currentTime, 1.0);
-    if (want <= 0) return;
-    if (nextBar < ctx.currentTime) nextBar = ctx.currentTime + 0.1;
-    while (nextBar < ctx.currentTime + 1.2){
-      const t = nextBar, chord = CH[bar % CH.length];
-      chord.forEach(n => { note(ctx, t, hz(n), BARLEN + 0.3, 'sawtooth', 0.045, null, 0.6); note(ctx, t, hz(n) * 1.004, BARLEN + 0.3, 'sawtooth', 0.035, null, 0.6); });
-      note(ctx, t, hz(chord[0] - 24), BARLEN * 0.95, 'sine', 0.22, gain, 0.05);
-      if (level > 0.35){ const arp = [0, 1, 2, 1, 0, 2, 1, 2]; arp.forEach((k, i) => note(ctx, t + i*BEAT/2, hz(chord[k] + 12), 0.22, 'triangle', 0.05 + level*0.03, gain, 0.005)); }
-      if (level > 0.55){ for (let i=0;i<8;i++) hat(ctx, t + i*BEAT/2, i % 2 ? 0.05 : 0.09); }
-      if (level > 0.7){ for (let i=0;i<4;i++) kick(ctx, t + i*BEAT, 0.35); }
-      nextBar += BARLEN; bar++;
-    }
+  function stop(ctx){
+    if (!playing) return; playing = false; const s = src; src = null;
+    gain.gain.cancelScheduledValues(ctx.currentTime); gain.gain.setTargetAtTime(0, ctx.currentTime, 0.5);
+    setTimeout(() => { try { s.stop(); } catch(e){} }, 2500);
   }
   return {
-    intensity(v){ return; want = on ? v : 0; if (!on) return; if (!setup()) return; if (!timer) timer = setInterval(schedule, 250); },
+    intensity(v){ const ctx = SFX.ctx; if (!ctx) return; load(ctx); const want = on && v > 0; if (want && !playing) start(ctx); else if (!want && playing) stop(ctx); },
     get on(){ return on; },
-    set(v){ on = v; lsSet('vtp3d-music', v); if (!v && gain && SFX.ctx) gain.gain.setTargetAtTime(0, SFX.ctx.currentTime, 0.3); }
+    set(v){ on = v; lsSet('vtp3d-music', v); if (!v){ const ctx = SFX.ctx; if (ctx) stop(ctx); } }
   };
 })();
 
@@ -2020,6 +2007,9 @@ $('#howbtn').onclick = () => { if (!G || G.tutorial) return; const b = $('#howbt
 function renderSoundBtn(){ const b = $('#g-sound'); b.textContent = SFX.on ? '소리 켜짐' : '소리 꺼짐'; b.setAttribute('aria-pressed', SFX.on); }
 $('#g-sound').onclick = () => { SFX.set(!SFX.on); if (SFX.on){ SFX.unlock(); SFX.play('tick'); } renderSoundBtn(); };
 renderSoundBtn();
+function renderMusicBtn(){ const b = $('#g-music'); b.textContent = MUSIC.on ? '음악 켜짐' : '음악 꺼짐'; b.setAttribute('aria-pressed', MUSIC.on); }
+$('#g-music').onclick = () => { MUSIC.set(!MUSIC.on); if (MUSIC.on) SFX.unlock(); renderMusicBtn(); };
+renderMusicBtn();
 $('#g-assist').onchange = e => { if (G){ G.assist = e.target.checked; refreshUI(true); } };
 function stopAmbience(){ ['wind','fire','buzz','static','alarmLoop','rain','birds'].forEach(n => SFX.loop(n, false)); MUSIC.intensity(0); ['#fx-gust','#fx-alert','#fx-amber','#fx-glitch','#hzb'].forEach(q => $(q).hidden = true); }
 function togglePause(){ if (!G || !G.running) return; G.paused = !G.paused; if (G.paused){ SFX.hum(0); renderFx(); } $('#pausebox').hidden = !G.paused; $('#g-pause').textContent = G.paused ? '계속' : '일시정지'; }
